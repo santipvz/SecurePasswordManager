@@ -203,3 +203,9 @@ class PasswordManagerApp:
         github_url = 'https://github.com/santipvz/PasswordGenerator'
         import webbrowser
         webbrowser.open_new(github_url)
+        
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = PasswordManagerApp(root)
+    root.mainloop()
