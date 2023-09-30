@@ -2,10 +2,12 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, PhotoImage
 import random
 import string
-import os
-from ctypes import windll
+import os, platform
 
-windll.shcore.SetProcessDpiAwareness(1)
+if platform.system() == "Windows":
+    from ctypes import windll
+
+    windll.shcore.SetProcessDpiAwareness(1)
 
 class PasswordManagerApp:
     def __init__(self, root):
@@ -21,12 +23,16 @@ class PasswordManagerApp:
 
     def create_notebook(self):
         style = ttk.Style()
-        style.theme_use("xpnative")
+        if platform.system() == "Linux":
+            style.theme_use("clam")
+        elif platform.system() == "Windows":
+            style.theme_use("xpnative")
+        
 
         # Customize the notebook appearance
         style.configure("TNotebook", background='#f0f0f0')
-        style.configure("TNotebook.Tab", background='red', foreground='black')
-        style.map("TNotebook.Tab", background=[("selected", '#0058a3')])
+        style.configure("TNotebook.Tab")
+        style.map("TNotebook.Tab")
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(padx=10, pady=10, fill='both', expand=True)
