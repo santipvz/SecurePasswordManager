@@ -1,12 +1,9 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, PhotoImage
-import random
-import string
-import os, platform
+import random, string, os, platform
 
 if platform.system() == "Windows":
     from ctypes import windll
-
     windll.shcore.SetProcessDpiAwareness(1)
 
 class PasswordManagerApp:
@@ -60,16 +57,14 @@ class PasswordManagerApp:
         self.create_password_length_entry = ttk.Entry(tab_create, font=("Helvetica", 12))
         self.create_password_length_entry.pack(padx=10, pady=5)
 
-        # Customize the "Create password" button
         create_button = ttk.Button(tab_create, text='Create password', command=self.create_password)
         create_button.pack(padx=10, pady=10)
         create_button.configure(style='TButton')
 
-        # Create an extra button with a smaller image on the lower right
-        create_image = PhotoImage(file='button_image.png')  # Change 'button_image.png' to your image file
+        create_image = PhotoImage(file='button_image.png')  
         create_button_image = tk.Button(tab_create, image=create_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
         create_button_image.image = create_image  # Save a reference to prevent garbage collection
-        create_button_image.place(relx=1, rely=1, anchor='se')  # Place it on the lower right
+        create_button_image.place(relx=1, rely=1, anchor='se')  
 
     def create_delete_tab(self):
         tab_delete = ttk.Frame(self.notebook)
@@ -90,14 +85,12 @@ class PasswordManagerApp:
         delete_button = ttk.Button(tab_delete, text='Delete', command=self.delete_selected_password)
         delete_button.pack(padx=10, pady=10)
 
-        # Customize the "Delete" button
         delete_button.configure(style='TButton')
 
-        # Create an extra button with a smaller image on the lower right
-        delete_image = PhotoImage(file='button_image.png')  # Change 'button_image.png' to your image file
+        delete_image = PhotoImage(file='button_image.png')  
         delete_button_image = tk.Button(tab_delete, image=delete_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
         delete_button_image.image = delete_image  # Save a reference to prevent garbage collection
-        delete_button_image.place(relx=1, rely=1, anchor='se')  # Place it on the lower right
+        delete_button_image.place(relx=1, rely=1, anchor='se')
 
     def create_edit_tab(self):
         tab_edit = ttk.Frame(self.notebook)
@@ -125,16 +118,14 @@ class PasswordManagerApp:
         self.edit_password_length_entry = ttk.Entry(tab_edit, font=("Helvetica", 12))
         self.edit_password_length_entry.pack(padx=10, pady=5)
 
-        # Customize the "Edit Password" button
         edit_button = ttk.Button(tab_edit, text='Edit Password', command=self.edit_password_details)
         edit_button.pack(padx=10, pady=10)
         edit_button.configure(style='TButton')
 
-        # Create an extra button with a smaller image on the lower right
-        edit_image = PhotoImage(file='button_image.png')  # Change 'button_image.png' to your image file
+        edit_image = PhotoImage(file='button_image.png')  
         edit_button_image = tk.Button(tab_edit, image=edit_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
         edit_button_image.image = edit_image  # Save a reference to prevent garbage collection
-        edit_button_image.place(relx=1, rely=1, anchor='se')  # Place it on the lower right
+        edit_button_image.place(relx=1, rely=1, anchor='se')  
 
     def generate_password(self, length):
         all_characters = string.ascii_letters + string.digits + '<=>@#%&+'
@@ -205,7 +196,6 @@ class PasswordManagerApp:
         self.edit_filename_entry.insert(0, filename)
 
     def extra_button_callback(self):
-        # Add your code here for the action you want to perform when the extra button is clicked
         github_url = 'https://github.com/santipvz/PasswordGenerator'
         import webbrowser
         webbrowser.open_new(github_url)
