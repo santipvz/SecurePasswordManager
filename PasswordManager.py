@@ -61,10 +61,16 @@ class PasswordManagerApp:
         create_button.pack(padx=10, pady=10)
         create_button.configure(style='TButton')
 
-        create_image = PhotoImage(file='button_image.png')  
-        create_button_image = tk.Button(tab_create, image=create_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
-        create_button_image.image = create_image  # Save a reference to prevent garbage collection
-        create_button_image.place(relx=1, rely=1, anchor='se')  
+        # Check if the image file exists, otherwise use a text button
+        github_image_path = 'button_image.png'
+        if os.path.exists(github_image_path):
+            create_image = PhotoImage(file=github_image_path)
+            create_button_image = tk.Button(tab_create, image=create_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
+            create_button_image.image = create_image  # Save a reference to prevent garbage collection
+            create_button_image.place(relx=1, rely=1, anchor='se')
+        else:
+            create_button_text = tk.Button(tab_create, text='GitHub', command=self.extra_button_callback)
+            create_button_text.place(relx=1, rely=1, anchor='se') 
 
     def create_delete_tab(self):
         tab_delete = ttk.Frame(self.notebook)
@@ -87,10 +93,16 @@ class PasswordManagerApp:
 
         delete_button.configure(style='TButton')
 
-        delete_image = PhotoImage(file='button_image.png')  
-        delete_button_image = tk.Button(tab_delete, image=delete_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
-        delete_button_image.image = delete_image  # Save a reference to prevent garbage collection
-        delete_button_image.place(relx=1, rely=1, anchor='se')
+        # Check if the image file exists, otherwise use a text button
+        github_image_path = 'button_image.png'
+        if os.path.exists(github_image_path):
+            create_image = PhotoImage(file=github_image_path)
+            create_button_image = tk.Button(tab_delete, image=create_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
+            create_button_image.image = create_image  # Save a reference to prevent garbage collection
+            create_button_image.place(relx=1, rely=1, anchor='se')
+        else:
+            create_button_text = tk.Button(tab_delete, text='GitHub', command=self.extra_button_callback)
+            create_button_text.place(relx=1, rely=1, anchor='se')
 
     def create_edit_tab(self):
         tab_edit = ttk.Frame(self.notebook)
@@ -122,10 +134,16 @@ class PasswordManagerApp:
         edit_button.pack(padx=10, pady=10)
         edit_button.configure(style='TButton')
 
-        edit_image = PhotoImage(file='button_image.png')  
-        edit_button_image = tk.Button(tab_edit, image=edit_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
-        edit_button_image.image = edit_image  # Save a reference to prevent garbage collection
-        edit_button_image.place(relx=1, rely=1, anchor='se')  
+        # Check if the image file exists, otherwise use a text button
+        github_image_path = 'button_image.png'
+        if os.path.exists(github_image_path):
+            create_image = PhotoImage(file=github_image_path)
+            create_button_image = tk.Button(tab_edit, image=create_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
+            create_button_image.image = create_image  # Save a reference to prevent garbage collection
+            create_button_image.place(relx=1, rely=1, anchor='se')
+        else:
+            create_button_text = tk.Button(tab_edit, text='GitHub', command=self.extra_button_callback)
+            create_button_text.place(relx=1, rely=1, anchor='se')
 
     def generate_password(self, length):
         all_characters = string.ascii_letters + string.digits + '<=>@#%&+'
