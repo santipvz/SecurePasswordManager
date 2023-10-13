@@ -67,7 +67,7 @@ class PasswordManagerApp:
         create_button.configure(style='TButton')
 
         # Check if the image file exists, otherwise use a text button
-        github_image_path = 'button_image.png'
+        github_image_path = 'assets/button_image.png'
         if os.path.exists(github_image_path):
             create_image = PhotoImage(file=github_image_path)
             create_button_image = tk.Button(tab_create, image=create_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
@@ -99,7 +99,7 @@ class PasswordManagerApp:
         delete_button.configure(style='TButton')
 
         # Check if the image file exists, otherwise use a text button
-        github_image_path = 'button_image.png'
+        github_image_path = 'assets/button_image.png'
         if os.path.exists(github_image_path):
             create_image = PhotoImage(file=github_image_path)
             create_button_image = tk.Button(tab_delete, image=create_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
@@ -114,7 +114,7 @@ class PasswordManagerApp:
         self.notebook.add(tab_edit, text='Edit')
 
         # Create widgets for the "Edit" tab...
-        edit_label = ttk.Label(tab_edit, text='Edit Password', font=('Helvetica', 20, 'bold'), padding=(0, 20))
+        edit_label = ttk.Label(tab_edit, text='Edit password', font=('Helvetica', 20, 'bold'), padding=(0, 20))
         edit_label.pack(padx=10, pady=10)
 
         edit_filename_label = ttk.Label(tab_edit, text='Select file to edit:', font=('Helvetica', 13))
@@ -140,7 +140,7 @@ class PasswordManagerApp:
         edit_button.configure(style='TButton')
 
         # Check if the image file exists, otherwise use a text button
-        github_image_path = 'button_image.png'
+        github_image_path = 'assets/button_image.png'
         if os.path.exists(github_image_path):
             create_image = PhotoImage(file=github_image_path)
             create_button_image = tk.Button(tab_edit, image=create_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
