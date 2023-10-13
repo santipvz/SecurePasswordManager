@@ -114,7 +114,7 @@ class PasswordManagerApp:
         self.notebook.add(tab_edit, text='Edit')
 
         # Create widgets for the "Edit" tab...
-        edit_label = ttk.Label(tab_edit, text='Edit password', font=('Helvetica', 20, 'bold'), padding=(0, 20))
+        edit_label = ttk.Label(tab_edit, text='Edit Password', font=('Helvetica', 20, 'bold'), padding=(0, 20))
         edit_label.pack(padx=10, pady=10)
 
         edit_filename_label = ttk.Label(tab_edit, text='Select file to edit:', font=('Helvetica', 13))
@@ -135,7 +135,7 @@ class PasswordManagerApp:
         self.edit_password_length_entry = ttk.Entry(tab_edit, font=("Helvetica", 12))
         self.edit_password_length_entry.pack(padx=10, pady=5)
 
-        edit_button = ttk.Button(tab_edit, text='Edit Password', command=self.edit_password_details)
+        edit_button = ttk.Button(tab_edit, text='Edit password', command=self.edit_password_details)
         edit_button.pack(padx=10, pady=10)
         edit_button.configure(style='TButton')
 
