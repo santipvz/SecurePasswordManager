@@ -1,6 +1,11 @@
+"""Module for the graphical user interface of the password manager."""
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, PhotoImage
-import random, string, os, platform
+import webbrowser
+import random
+import string
+import os
+import platform
 
 if platform.system() == "Windows":
     from ctypes import windll
@@ -24,7 +29,7 @@ class PasswordManagerApp:
             style.theme_use("clam")
         elif platform.system() == "Windows":
             style.theme_use("xpnative")
-        
+
 
         # Customize the notebook appearance
         style.configure("TNotebook", background='#f0f0f0')
@@ -70,7 +75,7 @@ class PasswordManagerApp:
             create_button_image.place(relx=1, rely=1, anchor='se')
         else:
             create_button_text = tk.Button(tab_create, text='GitHub', command=self.extra_button_callback)
-            create_button_text.place(relx=1, rely=1, anchor='se') 
+            create_button_text.place(relx=1, rely=1, anchor='se')
 
     def create_delete_tab(self):
         tab_delete = ttk.Frame(self.notebook)
@@ -150,7 +155,7 @@ class PasswordManagerApp:
         return ''.join(random.choice(all_characters) for _ in range(length))
 
     def save_password(self, filename, username, password):
-        with open(filename, 'w') as file:
+        with open(filename, 'w', encoding="utf-8") as file:
             file.write(f'User: {username}\n')
             file.write(f'Password: {password}')
 
@@ -184,18 +189,18 @@ class PasswordManagerApp:
         new_password = self.generate_password(new_password_length)
 
         try:
-            with open(filename, 'w') as file:
+            with open(filename, 'w', encoding="utf-8") as file:
                 file.write(f'User: {new_username}\n')
                 file.write(f'Password: {new_password}\n')
             messagebox.showinfo('Edit Successful', 'Password details have been edited successfully')
-        except Exception as e:
+        except FileNotFoundError as e:
             messagebox.showerror('Edit Error', f'Error editing the file: {e}')
 
     def delete_password(self, filename):
         try:
             os.remove(filename)
             messagebox.showinfo('Deletion Successful', f'The file {filename} has been deleted')
-        except Exception as e:
+        except FileNotFoundError as e:
             messagebox.showerror('Deletion Error', f'Error deleting the file: {e}')
 
     def delete_selected_password(self):
@@ -215,11 +220,11 @@ class PasswordManagerApp:
 
     def extra_button_callback(self):
         github_url = 'https://github.com/santipvz/PasswordGenerator'
-        import webbrowser
         webbrowser.open_new(github_url)
-        
+
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = PasswordManagerApp(root)
     root.mainloop()
+    
