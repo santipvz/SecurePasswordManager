@@ -1,20 +1,30 @@
-"""Module for the graphical user interface of the password manager."""
+"""Module for a graphical interface, random generation of passwords, and os function imports"""
+
+import os
+import platform
+import random
+import string
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, PhotoImage
 import webbrowser
-import random
-import string
-import os
-import platform
 
 if platform.system() == "Windows":
     from ctypes import windll
+
     windll.shcore.SetProcessDpiAwareness(1)
 
 class PasswordManagerApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title('SPM')
+    def __init__(self, interface):
+        self.interface = interface
+        self.interface.title('SPM')
+        self.notebook = None
+        self.create_filename_entry = None
+        self.create_username_entry = None
+        self.create_password_length_entry = None
+        self.delete_filename_entry = None
+        self.edit_filename_entry = None
+        self.edit_username_entry = None
+        self.edit_password_length_entry = None
         self.create_ui()
 
     def create_ui(self):
@@ -30,20 +40,17 @@ class PasswordManagerApp:
         elif platform.system() == "Windows":
             style.theme_use("xpnative")
 
-
-        # Customize the notebook appearance
         style.configure("TNotebook", background='#f0f0f0')
         style.configure("TNotebook.Tab")
         style.map("TNotebook.Tab")
 
-        self.notebook = ttk.Notebook(self.root)
+        self.notebook = ttk.Notebook(self.interface)
         self.notebook.pack(padx=10, pady=10, fill='both', expand=True)
 
     def create_create_tab(self):
         tab_create = ttk.Frame(self.notebook)
         self.notebook.add(tab_create, text='Create')
 
-        # Create widgets for the "Create" tab...
         create_label = ttk.Label(tab_create, text='Create Password', font=('Helvetica', 20, 'bold'), padding=(0, 20))
         create_label.pack(padx=10, pady=10)
 
@@ -66,12 +73,12 @@ class PasswordManagerApp:
         create_button.pack(padx=10, pady=10)
         create_button.configure(style='TButton')
 
-        # Check if the image file exists, otherwise use a text button
-        github_image_path = 'assets/button_image.png'
+        github_image_path = 'button_image.png'
         if os.path.exists(github_image_path):
             create_image = PhotoImage(file=github_image_path)
-            create_button_image = tk.Button(tab_create, image=create_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
-            create_button_image.image = create_image  # Save a reference to prevent garbage collection
+            create_button_image = tk.Button(tab_create, image=create_image, command=self.extra_button_callback,
+                                            relief='flat', highlightthickness=0, bd=0)
+            create_button_image.image = create_image
             create_button_image.place(relx=1, rely=1, anchor='se')
         else:
             create_button_text = tk.Button(tab_create, text='GitHub', command=self.extra_button_callback)
@@ -81,7 +88,6 @@ class PasswordManagerApp:
         tab_delete = ttk.Frame(self.notebook)
         self.notebook.add(tab_delete, text='Delete')
 
-        # Create widgets for the "Delete" tab...
         delete_label = ttk.Label(tab_delete, text='Delete Password', font=('Helvetica', 20, 'bold'), padding=(0, 20))
         delete_label.pack(padx=10, pady=10)
 
@@ -95,15 +101,14 @@ class PasswordManagerApp:
 
         delete_button = ttk.Button(tab_delete, text='Delete', command=self.delete_selected_password)
         delete_button.pack(padx=10, pady=10)
-
         delete_button.configure(style='TButton')
 
-        # Check if the image file exists, otherwise use a text button
-        github_image_path = 'assets/button_image.png'
+        github_image_path = 'button_image.png'
         if os.path.exists(github_image_path):
             create_image = PhotoImage(file=github_image_path)
-            create_button_image = tk.Button(tab_delete, image=create_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
-            create_button_image.image = create_image  # Save a reference to prevent garbage collection
+            create_button_image = tk.Button(tab_delete, image=create_image, command=self.extra_button_callback,
+                                            relief='flat', highlightthickness=0, bd=0)
+            create_button_image.image = create_image
             create_button_image.place(relx=1, rely=1, anchor='se')
         else:
             create_button_text = tk.Button(tab_delete, text='GitHub', command=self.extra_button_callback)
@@ -113,7 +118,6 @@ class PasswordManagerApp:
         tab_edit = ttk.Frame(self.notebook)
         self.notebook.add(tab_edit, text='Edit')
 
-        # Create widgets for the "Edit" tab...
         edit_label = ttk.Label(tab_edit, text='Edit Password', font=('Helvetica', 20, 'bold'), padding=(0, 20))
         edit_label.pack(padx=10, pady=10)
 
@@ -135,16 +139,16 @@ class PasswordManagerApp:
         self.edit_password_length_entry = ttk.Entry(tab_edit, font=("Helvetica", 12))
         self.edit_password_length_entry.pack(padx=10, pady=5)
 
-        edit_button = ttk.Button(tab_edit, text='Edit password', command=self.edit_password_details)
+        edit_button = ttk.Button(tab_edit, text='Edit Password', command=self.edit_password_details)
         edit_button.pack(padx=10, pady=10)
         edit_button.configure(style='TButton')
 
-        # Check if the image file exists, otherwise use a text button
-        github_image_path = 'assets/button_image.png'
+        github_image_path = 'button_image.png'
         if os.path.exists(github_image_path):
             create_image = PhotoImage(file=github_image_path)
-            create_button_image = tk.Button(tab_edit, image=create_image, command=self.extra_button_callback, relief='flat', highlightthickness=0, bd=0)
-            create_button_image.image = create_image  # Save a reference to prevent garbage collection
+            create_button_image = tk.Button(tab_edit, image=create_image, command=self.extra_button_callback,
+                                            relief='flat', highlightthickness=0, bd=0)
+            create_button_image.image = create_image
             create_button_image.place(relx=1, rely=1, anchor='se')
         else:
             create_button_text = tk.Button(tab_edit, text='GitHub', command=self.extra_button_callback)
@@ -152,12 +156,12 @@ class PasswordManagerApp:
 
     def generate_password(self, length):
         all_characters = string.ascii_letters + string.digits + '<=>@#%&+'
-        return ''.join(random.choice(all_characters) for _ in range(length))
+        return ''.join(random.choice(all_characters) for _ in range(length)
 
     def save_password(self, filename, username, password):
         with open(filename, 'w', encoding="utf-8") as file:
             file.write(f'User: {username}\n')
-            file.write(f'Password: {password}')
+            file.write(f'Password: {password}\n')
 
     def create_password(self):
         filename = self.create_filename_entry.get()
@@ -227,4 +231,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = PasswordManagerApp(root)
     root.mainloop()
-    
