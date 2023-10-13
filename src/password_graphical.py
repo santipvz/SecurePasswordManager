@@ -156,7 +156,7 @@ class PasswordManagerApp:
 
     def generate_password(self, length):
         all_characters = string.ascii_letters + string.digits + '<=>@#%&+'
-        return ''.join(random.choice(all_characters) for _ in range(length)
+        return ''.join(random.choice(all_characters) for _ in range(length))
 
     def save_password(self, filename, username, password):
         with open(filename, 'w', encoding="utf-8") as file:
