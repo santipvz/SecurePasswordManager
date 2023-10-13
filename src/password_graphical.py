@@ -1,5 +1,4 @@
-"""Module for graphic interface,random generation of passwords 
-and os function imports"""
+"""Module for graphic interface, random generation of passwords, and OS function imports"""
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, PhotoImage
@@ -14,7 +13,14 @@ if platform.system() == "Windows":
     windll.shcore.SetProcessDpiAwareness(1)
 
 class PasswordManagerApp:
+    """The main application class for the Password Manager."""
+
     def __init__(self, interface):
+        """Initialize the PasswordManagerApp class.
+
+        Args:
+            interface: The Tkinter interface for the application.
+        """
         self.interface = interface
         self.interface.title('SPM')
         self.notebook = None
@@ -28,19 +34,21 @@ class PasswordManagerApp:
         self.create_ui()
 
     def create_ui(self):
+        """Create the user interface for the application."""
         self.create_notebook()
         self.create_create_tab()
         self.create_delete_tab()
         self.create_edit_tab()
 
     def create_notebook(self):
+        """Create the notebook (tabbed interface) for the application."""
         style = ttk.Style()
         if platform.system() == "Linux":
             style.theme_use("clam")
         elif platform.system() == "Windows":
             style.theme_use("xpnative")
 
-        #Customize the notebook appearance
+        # Customize the notebook appearance
         style.configure("TNotebook", background='#f0f0f0')
         style.configure("TNotebook.Tab")
         style.map("TNotebook.Tab")
@@ -49,6 +57,7 @@ class PasswordManagerApp:
         self.notebook.pack(padx=10, pady=10, fill='both', expand=True)
 
     def create_create_tab(self):
+        """Create the "Create" tab of the user interface."""
         tab_create = ttk.Frame(self.notebook)
         self.notebook.add(tab_create, text='Create')
 
@@ -89,7 +98,7 @@ class PasswordManagerApp:
                                             command=self.extra_button_callback,
                                             relief='flat',
                                             highlightthickness=0, bd=0)
-            create_button_image.image = create_image  #Saver eference to prevent garbage collection
+            create_button_image.image = create_image  # Save reference to prevent garbage collection
             create_button_image.place(relx=1, rely=1, anchor='se')
         else:
             create_button_text = tk.Button(tab_create,
@@ -98,6 +107,7 @@ class PasswordManagerApp:
             create_button_text.place(relx=1, rely=1, anchor='se')
 
     def create_delete_tab(self):
+        """Create the "Delete" tab of the user interface."""
         tab_delete = ttk.Frame(self.notebook)
         self.notebook.add(tab_delete, text='Delete')
 
@@ -122,7 +132,6 @@ class PasswordManagerApp:
 
         delete_button = ttk.Button(tab_delete, text='Delete', command=self.delete_selected_password)
         delete_button.pack(padx=10, pady=10)
-
         delete_button.configure(style='TButton')
 
         # Check if the image file exists, otherwise use a text button
@@ -134,7 +143,7 @@ class PasswordManagerApp:
                                             command=self.extra_button_callback,
                                             relief='flat',
                                             highlightthickness=0, bd=0)
-            create_button_image.image = create_image  #Save reference to prevent garbage collection
+            create_button_image.image = create_image  # Save reference to prevent garbage collection
             create_button_image.place(relx=1, rely=1, anchor='se')
         else:
             create_button_text = tk.Button(tab_delete,
@@ -143,6 +152,7 @@ class PasswordManagerApp:
             create_button_text.place(relx=1, rely=1, anchor='se')
 
     def create_edit_tab(self):
+        """Create the "Edit" tab of the user interface."""
         tab_edit = ttk.Frame(self.notebook)
         self.notebook.add(tab_edit, text='Edit')
 
@@ -187,24 +197,40 @@ class PasswordManagerApp:
                                             image=create_image,
                                             command=self.extra_button_callback,
                                             relief='flat', highlightthickness=0, bd=0)
-            create_button_image.image = create_image  #Save reference to prevent garbage collection
+            create_button_image.image = create_image  # Save reference to prevent garbage collection
             create_button_image.place(relx=1, rely=1, anchor='se')
         else:
-            create_button_text = tk.Button(tab_edit, 
-                                            text='GitHub', 
+            create_button_text = tk.Button(tab_edit,
+                                            text='GitHub',
                                             command=self.extra_button_callback)
             create_button_text.place(relx=1, rely=1, anchor='se')
 
     def generate_password(self, length):
+        """Generate a random password of the specified length.
+
+        Args:
+            length (int): The length of the password to generate.
+
+        Returns:
+            str: The randomly generated password.
+        """
         all_characters = string.ascii_letters + string.digits + '<=>@#%&+'
         return ''.join(random.choice(all_characters) for _ in range(length))
 
     def save_password(self, filename, username, password):
+        """Save the username and password to a text file.
+
+        Args:
+            filename (str): The name of the file to save.
+            username (str): The username.
+            password (str): The password.
+        """
         with open(filename, 'w', encoding="utf-8") as file:
             file.write(f'User: {username}\n')
             file.write(f'Password: {password}')
 
     def create_password(self):
+        """Generate and save a new password based on user input."""
         filename = self.create_filename_entry.get()
         username = self.create_username_entry.get()
         password_length_str = self.create_password_length_entry.get()
@@ -222,6 +248,7 @@ class PasswordManagerApp:
         messagebox.showinfo('Creation Successful', 'Password has been created successfully')
 
     def edit_password_details(self):
+        """Edit the username and password length of a password file."""
         filename = self.edit_filename_entry.get()
         new_username = self.edit_username_entry.get()
         new_password_length_str = self.edit_password_length_entry.get()
@@ -242,6 +269,11 @@ class PasswordManagerApp:
             messagebox.showerror('Edit Error', f'Error editing the file: {e}')
 
     def delete_password(self, filename):
+        """Delete a password file.
+
+        Args:
+            filename (str): The name of the file to delete.
+        """
         try:
             os.remove(filename)
             messagebox.showinfo('Deletion Successful', f'The file {filename} has been deleted')
@@ -249,24 +281,27 @@ class PasswordManagerApp:
             messagebox.showerror('Deletion Error', f'Error deleting the file: {e}')
 
     def delete_selected_password(self):
+        """Delete the selected password based on user input."""
         filename = self.delete_filename_entry.get()
         self.delete_password(filename)
         self.delete_filename_entry.delete(0, tk.END)
 
     def browse_file_to_delete(self):
+        """Open a file dialog to browse for a file to delete."""
         filename = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt")])
         self.delete_filename_entry.delete(0, tk.END)
         self.delete_filename_entry.insert(0, filename)
 
     def browse_file_to_edit(self):
+        """Open a file dialog to browse for a file to edit."""
         filename = filedialog.askopenfilename(filetypes=[("Text Files", "*.txt")])
         self.edit_filename_entry.delete(0, tk.END)
         self.edit_filename_entry.insert(0, filename)
 
     def extra_button_callback(self):
+        """Open a web browser to visit the GitHub repository."""
         github_url = 'https://github.com/santipvz/PasswordGenerator'
         webbrowser.open_new(github_url)
-
 
 if __name__ == "__main__":
     root = tk.Tk()
