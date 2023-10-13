@@ -2,11 +2,11 @@
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, PhotoImage
-import random
-import string
 import os
 import platform
 import webbrowser
+from password_console import PasswordManager
+
 
 if platform.system() == "Windows":
     from ctypes import windll
@@ -26,17 +26,6 @@ class PasswordManagerApp:
         DeleteTab(self.notebook)
         EditTab(self.notebook, self)
 
-    def generate_password(self, length):
-        """Generate a random password of the specified length."""
-        all_characters = string.ascii_letters + string.digits + '<=>@#%&+'
-        return ''.join(random.choice(all_characters) for _ in range(length))
-
-    def save_password(self, filename, username, password):
-        """Save the specified username and password to a file."""
-        with open(filename, 'w', encoding="utf-8") as file:
-            file.write(f'User: {username}\n')
-            file.write(f'Password: {password}')
-
     def edit_password_details(self, filename, new_username, new_password_length_str):
         """Edit the username and password length of the selected password file."""
         if not new_password_length_str.isdigit():
@@ -44,7 +33,7 @@ class PasswordManagerApp:
             return False
 
         new_password_length = int(new_password_length_str)
-        new_password = self.generate_password(new_password_length)
+        new_password = PasswordManager().generate_password(new_password_length)
 
         try:
             with open(filename, 'w', encoding="utf-8") as file:
@@ -156,8 +145,8 @@ class CreateTab(PasswordManagerTab):
             return
 
         password_length = int(password_length_str)
-        password = PasswordManagerApp.generate_password(self, password_length)
-        PasswordManagerApp.save_password(self, filename + '.txt', username, password)
+        password = PasswordManager().generate_password(password_length)
+        PasswordManager.save_password(self, filename + '.txt', username, password)
         self.filename_entry.delete(0, tk.END)
         self.username_entry.delete(0, tk.END)
         self.password_length_entry.delete(0, tk.END)
