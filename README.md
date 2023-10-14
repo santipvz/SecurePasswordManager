@@ -4,7 +4,7 @@
 
 ![Tests](https://github.com/santipvz/SecurePasswordManager/actions/workflows/pylint.yml/badge.svg/)
 ![Static Badge](https://img.shields.io/badge/Version-1.0-blue/)
-![GitHub all releases](https://img.shields.io/github/downloads/santipvz/SecurePasswordManager/total)
+![Github All Releases](https://img.shields.io/github/downloads/santipvz/SecurePasswordManager/total.svg)
 
  ## Usage
 First of all you will need to clone this repository or download the zip with the file (green button)
