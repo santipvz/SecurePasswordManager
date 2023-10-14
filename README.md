@@ -2,9 +2,11 @@
  With this program you will be able to create random passwords with the length you desire. The passwords will be saved in the same directory where the python file is located.
  You can also edit the password generating another one or even delete a file you don't need anymore.
 
-![Tests](https://github.com/santipvz/SecurePasswordManager/actions/workflows/pylint.yml/badge.svg/)
-![Static Badge](https://img.shields.io/badge/Version-1.0-blue/)
-![Github All Releases](https://img.shields.io/github/downloads/santipvz/SecurePasswordManager/total.svg)
+<p align="center">
+   <img src="https://github.com/santipvz/SecurePasswordManager/actions/workflows/pylint.yml/badge.svg/" alt="Tests">
+   <img src="https://img.shields.io/badge/Version-1.0-blue/" alt="Static Badge">
+   
+</p>
 
  ## Usage
 First of all you will need to clone this repository or download the zip with the file (green button)
