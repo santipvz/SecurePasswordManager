@@ -4,12 +4,14 @@
 
 <p align="center">
    <img src="https://github.com/santipvz/SecurePasswordManager/actions/workflows/pylint.yml/badge.svg/" alt="Tests">
-   <img src="https://img.shields.io/badge/Version-1.0-blue/" alt="Static Badge">
+   <img src="https://img.shields.io/badge/Version-2.0-blue/" alt="Static Badge">
    
 </p>
 
  ## Usage
 First of all you will need to clone this repository or download the zip with the file (green button)
+> [!IMPORTANT]
+> Remember installing all libraries with `pip install -r requirements.txt`
 
 There are 2 ways for using this program.
 ### 1. Graphical interface
@@ -36,4 +38,4 @@ This is a more direct way to manage the files. Now you will see an example of ea
 <pre><code>python3 password_console.py delete --filename test</code></pre>
 
 > [!NOTE]
-> Remember that in Linux you must use _`python3`_ instead of _`python`_ for the script to work.
+> This program will create `.key` files that you can open with any notepad as if it was a `.txt`
