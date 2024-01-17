@@ -1,1 +1,1 @@
-tk==0.1.0
+PySimpleGUI==4.60.5
