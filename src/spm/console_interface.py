@@ -1,6 +1,6 @@
 """Console interface to manage passwords."""
 import argparse
-from password_manager import PasswordManager
+from .sec_pass_manager import PasswordManager
 
 def main():
     """Main function to manage passwords from the console."""
@@ -8,11 +8,11 @@ def main():
 
     parser.add_argument('action', choices=['create', 'edit', 'delete'],
                         help='Action to perform.')
-    parser.add_argument('--filename', required=True,
+    parser.add_argument('--filename', '-f', required=True,
                         help='The file you want to create, edit, or delete.')
-    parser.add_argument('--username',
+    parser.add_argument('--username', '-u',
                         help='The username you want to use.')
-    parser.add_argument('--length', type=str, default='10',
+    parser.add_argument('--length', '-l', type=str, default='10',
                         help='The length of the password you want to generate.')
 
     args = parser.parse_args()

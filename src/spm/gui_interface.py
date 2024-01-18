@@ -2,7 +2,7 @@
 import os
 import webbrowser
 import PySimpleGUI as sg
-from password_manager import PasswordManager
+from .sec_pass_manager import PasswordManager
 
 
 class PasswordManagerApp:
@@ -81,6 +81,10 @@ class PasswordManagerApp:
         username = values['-USERNAME-']
         password_length_str = values['-PASSWORD_LENGTH-']
 
+        if os.path.exists(filename + '.key'):
+            sg.popup_error('Invalid Input', f'File {filename}.key already exists in the directory.')
+            return
+
         if not password_length_str.isdigit():
             sg.popup_error('Invalid Input', 'Password length must be a positive integer.')
             return
@@ -126,7 +130,10 @@ class PasswordManagerApp:
             sg.popup('Edit Successful', f'File {filename} has been edited successfully')
         except FileNotFoundError as error:
             sg.popup_error('Edit Error', f'Error editing the file: {error}')
-
-if __name__ == "__main__":
+def main():
+    """Main function to manage passwords from the GUI."""
     app = PasswordManagerApp()
     app.run()
+
+if __name__ == "__main__":
+    main()
