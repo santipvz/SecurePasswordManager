@@ -9,7 +9,7 @@
 </p>
 
  ## Usage
-First of all, you can install this project with `pip install sec-pass`
+First of all, you can install this project with `pip install sec-pass-manager`
 
 There are 2 ways for using this program.
 ### 1. Graphical interface
