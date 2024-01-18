@@ -81,6 +81,10 @@ class PasswordManagerApp:
         username = values['-USERNAME-']
         password_length_str = values['-PASSWORD_LENGTH-']
 
+        if not filename:
+            sg.popup_error('Invalid Input', 'Filename cannot be empty.')
+            return
+
         if os.path.exists(filename + '.key'):
             sg.popup_error('Invalid Input', f'File {filename}.key already exists in the directory.')
             return
