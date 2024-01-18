@@ -4,7 +4,7 @@
 
 <p align="center">
    <img src="https://github.com/santipvz/SecurePasswordManager/actions/workflows/pylint.yml/badge.svg/" alt="Tests">
-   <img src="https://img.shields.io/badge/Version-1.1-blue/" alt="Static Badge">
+   <img src="https://img.shields.io/badge/Version-1.2-blue/" alt="Static Badge">
    
 </p>
 
