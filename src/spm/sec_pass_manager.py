@@ -22,7 +22,9 @@ class PasswordManager:
     @staticmethod
     def create_password(filename, username, password_length):
         """Create a password file."""
-
+        if not filename:
+            print('Filename cannot be empty.')
+            return
         if os.path.exists(filename + '.key'):
             print(f'File {filename} already exists in the directory.')
             return
