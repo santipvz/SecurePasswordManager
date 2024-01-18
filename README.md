@@ -23,7 +23,7 @@ After that a window will popup where you can create, delete or edit a file that 
 </p>
 
 ### 2. Console
-This is a more direct way to manage the files. Now you will see an example of each function:
+This is a more direct way to manage the files using the console command `cpass`. Now you will see an example of each function:
 
 <p align="center">
   <img src="assets/console_commands.png" width="780" style="margin: 10px;">
@@ -38,6 +38,4 @@ There is also de reduced commands
 <pre><code>cpass delete -f test</code></pre>
 
 > [!NOTE]
-> This program will create `.key` files that you can open with any notepad as if it was a `.txt`
-
-> If you don't indicate a length it will be set to 10 as default.
+> This program will create `.key` files that you can open with any notepad as if it was a `.txt`<br><br>If you don't indicate a length it will be set to 10 as default.
