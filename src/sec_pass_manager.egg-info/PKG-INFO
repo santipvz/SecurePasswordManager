@@ -1,3 +1,19 @@
+Metadata-Version: 2.1
+Name: sec_pass_manager
+Version: 1.1
+Summary: A password manager
+Home-page: https://github.com/santipvz/SecurePasswordManager
+Author: santipvz
+Author-email: santivzqzz@gmail.com
+Project-URL: Bug Tracker, https://github.com/santipvz/SecurePasswordManager/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: PySimpleGUI
+
 # Secure Password Manager
  With this program you will be able to create random passwords with the length you desire. The passwords will be saved in the same directory your console is.
  You can also edit the password generating another one or even delete a file you don't need anymore.

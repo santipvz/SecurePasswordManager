@@ -1,0 +1,3 @@
+[console_scripts]
+cpass = spm.console_interface:main
+spm = spm.gui_interface:main

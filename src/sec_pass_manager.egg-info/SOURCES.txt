@@ -1,0 +1,14 @@
+LICENSE
+README.md
+pyproject.toml
+setup.cfg
+src/sec_pass_manager.egg-info/PKG-INFO
+src/sec_pass_manager.egg-info/SOURCES.txt
+src/sec_pass_manager.egg-info/dependency_links.txt
+src/sec_pass_manager.egg-info/entry_points.txt
+src/sec_pass_manager.egg-info/requires.txt
+src/sec_pass_manager.egg-info/top_level.txt
+src/spm/__init__.py
+src/spm/console_interface.py
+src/spm/gui_interface.py
+src/spm/sec_pass_manager.py
