@@ -58,7 +58,7 @@ class PasswordManagerApp:
 
     def _delete_tab(self):
         return [
-            [sg.Text('Select file to delete', size=(15, 1)),
+            [sg.Text('Select file to delete', size=(16, 1)),
              sg.Input(key='-FILE_TO_DELETE-',enable_events=True, size=(20, 1)),
             sg.FileBrowse(file_types=(("Text Files", "*.key"), ("All Files", "*.*")))],
             [sg.Text('')],[sg.Text('')],
