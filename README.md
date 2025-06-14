@@ -39,3 +39,7 @@ There is also de reduced commands
 
 > [!NOTE]
 > This program will create `.key` files that you can open with any notepad as if it was a `.txt`<br><br>If you don't indicate a length it will be set to 10 as default.
+
+> [!WARNING]
+> Graphical interface does not work anymore. CLI still does.
+
