@@ -17,13 +17,13 @@ You can manage password files using the console command `cpass`. Here are exampl
 <p align="center">
   <img src="assets/console_commands.png" width="780" style="margin: 10px;">
 </p>
-<pre><code>cpass create --filename test --username pingu --length 24</code></pre>
-<pre><code>cpass edit --filename test --username pingu2 --length 12</code></pre>
+<pre><code>cpass create --filename test --username santi --length 24</code></pre>
+<pre><code>cpass edit --filename test --username santi --length 12</code></pre>
 <pre><code>cpass delete --filename test</code></pre>
 
 There is also de reduced commands
-<pre><code>cpass create -f test -u pingu -l 24</code></pre>
-<pre><code>cpass edit -f test -u pingu2 -l 12</code></pre>
+<pre><code>cpass create -f test -u santi -l 24</code></pre>
+<pre><code>cpass edit -f test -u santi -l 12</code></pre>
 <pre><code>cpass delete -f test</code></pre>
 
 > [!NOTE]
