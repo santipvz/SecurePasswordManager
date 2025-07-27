@@ -4,26 +4,15 @@
 
 <p align="center">
    <img src="https://github.com/santipvz/SecurePasswordManager/actions/workflows/pylint.yml/badge.svg/" alt="Tests">
-   <img src="https://img.shields.io/badge/Version-1.2-blue/" alt="Static Badge">
-   
+   <img src="https://img.shields.io/badge/Version-1.3-blue/" alt="Static Badge">
+
 </p>
 
  ## Usage
 First of all, you can install this project with `pip install sec-pass-manager`
 
-There are 2 ways for using this program.
-### 1. Graphical interface
-All you need to do type `spm` on your console.
-
-After that a window will popup where you can create, delete or edit a file that contains username and password:
-<p align="center">
-  <img src="assets/create_graphical.png" width="250" style="margin: 10px;">
-  <img src="assets/delete_graphical.png" width="250" style="margin: 10px;">
-  <img src="assets/edit_graphical.png" width="250" style="margin: 10px;">
-</p>
-
-### 2. Console
-This is a more direct way to manage the files using the console command `cpass`. Now you will see an example of each function:
+### Console Interface
+You can manage password files using the console command `cpass`. Here are examples of each function:
 
 <p align="center">
   <img src="assets/console_commands.png" width="780" style="margin: 10px;">
@@ -39,7 +28,4 @@ There is also de reduced commands
 
 > [!NOTE]
 > This program will create `.key` files that you can open with any notepad as if it was a `.txt`<br><br>If you don't indicate a length it will be set to 10 as default.
-
-> [!WARNING]
-> Graphical interface does not work anymore. CLI still does.
 
