@@ -1,0 +1,11 @@
+[package]
+name = "secure-password-manager-desktop"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[build-dependencies]
+tauri-build = "2"
+
+[dependencies]
+tauri = "2"
