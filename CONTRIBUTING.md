@@ -17,4 +17,6 @@ Use English for issues, commit messages, pull requests, and documentation. Each 
 3. When the PR is ready, request a review with `@codex review` unless automatic review has already started. Address actionable findings and request a fresh review after significant changes.
 4. Use **Squash and merge** after checks pass and review findings are resolved. The squash commit should summarize the change and preserve the issue link.
 
+Follow the [CI and release checks](CI.md) to reproduce test runs, update dependency locks, and review advisories before release.
+
 [Linking issues to pull requests](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue) · [Codex code review](https://learn.chatgpt.com/docs/third-party/github)
