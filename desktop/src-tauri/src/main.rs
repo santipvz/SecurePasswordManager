@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod vault_clipboard;
 mod vault_dialog;
 mod vault_process;
 mod vault_session;
@@ -13,8 +14,8 @@ use tauri::{
 use tokio::sync::Mutex;
 use zeroize::Zeroizing;
 
-use vault_process::Error;
-use vault_session::{Entries, Unlocked, VaultSession, VaultStatus};
+use vault_process::{CredentialInput, Error};
+use vault_session::{Entries, Entry, Unlocked, VaultSession, VaultStatus};
 
 type Vault<'a> = State<'a, Arc<VaultSession>>;
 
@@ -94,6 +95,39 @@ async fn vault_list(vault: Vault<'_>, generation: u64) -> Result<Entries, Error>
 }
 
 #[tauri::command]
+async fn vault_entry_notes(
+    vault: Vault<'_>,
+    generation: u64,
+    name: String,
+) -> Result<String, Error> {
+    vault.entry_notes(generation, name).await
+}
+
+#[tauri::command]
+async fn vault_reveal(vault: Vault<'_>, generation: u64, name: String) -> Result<String, Error> {
+    vault.reveal(generation, name).await
+}
+
+#[tauri::command]
+async fn vault_copy(vault: Vault<'_>, generation: u64, name: String) -> Result<(), Error> {
+    vault.copy(generation, name).await
+}
+
+#[tauri::command]
+async fn vault_save(
+    vault: Vault<'_>,
+    generation: u64,
+    entry: CredentialInput,
+) -> Result<Entry, Error> {
+    vault.save(generation, entry).await
+}
+
+#[tauri::command]
+async fn vault_delete(vault: Vault<'_>, generation: u64, name: String) -> Result<(), Error> {
+    vault.delete(generation, name).await
+}
+
+#[tauri::command]
 async fn vault_lock(vault: Vault<'_>) -> Result<u64, Error> {
     Ok(vault.lock().await)
 }
@@ -140,7 +174,9 @@ fn main() {
                 .join(executable);
             let vault = Arc::new(VaultSession::new(path));
             app.manage(Arc::clone(&vault));
-            tauri::async_runtime::spawn(async move { vault.monitor().await });
+            let session_monitor = Arc::clone(&vault);
+            tauri::async_runtime::spawn(async move { session_monitor.monitor().await });
+            tauri::async_runtime::spawn(async move { vault.monitor_clipboard().await });
             WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
                 .on_navigation(local_navigation)
                 .on_new_window(|_, _| NewWindowResponse::Deny)
@@ -153,6 +189,11 @@ fn main() {
             vault_unlock_key,
             vault_select,
             vault_list,
+            vault_entry_notes,
+            vault_reveal,
+            vault_copy,
+            vault_save,
+            vault_delete,
             vault_lock,
             vault_active,
             vault_activity,
@@ -163,7 +204,9 @@ fn main() {
             if matches!(event, RunEvent::Exit) {
                 let vault = app.state::<Arc<VaultSession>>();
                 vault.close();
-                tauri::async_runtime::block_on(vault.stop_stale());
+                tauri::async_runtime::block_on(async {
+                    tokio::join!(vault.stop_stale(), vault.clean_clipboard());
+                });
             }
         });
 }
