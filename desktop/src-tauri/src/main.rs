@@ -15,7 +15,7 @@ use tokio::sync::Mutex;
 use zeroize::Zeroizing;
 
 use vault_process::{CredentialInput, Error};
-use vault_session::{Entries, Entry, Unlocked, VaultSession, VaultStatus};
+use vault_session::{Entries, Entry, Review, Unlocked, VaultSession, VaultStatus};
 
 type Vault<'a> = State<'a, Arc<VaultSession>>;
 
@@ -92,6 +92,21 @@ async fn vault_unlock_key(
 #[tauri::command]
 async fn vault_list(vault: Vault<'_>, generation: u64) -> Result<Entries, Error> {
     vault.list(generation).await
+}
+
+#[tauri::command]
+async fn vault_generate(
+    vault: Vault<'_>,
+    generation: Option<u64>,
+    length: u32,
+    symbols: bool,
+) -> Result<String, Error> {
+    vault.generate(generation, length, symbols).await
+}
+
+#[tauri::command]
+async fn vault_review(vault: Vault<'_>, generation: u64) -> Result<Review, Error> {
+    vault.review(generation).await
 }
 
 #[tauri::command]
@@ -189,6 +204,8 @@ fn main() {
             vault_unlock_key,
             vault_select,
             vault_list,
+            vault_generate,
+            vault_review,
             vault_entry_notes,
             vault_reveal,
             vault_copy,

@@ -8,6 +8,10 @@ Search an unlocked vault by name, username, or website. Select an entry to view 
 
 Passwords stay hidden until you reveal them. A reveal lasts 10 seconds and ends when you leave the details view or the window loses focus. Copying sends the password directly to the system clipboard through Rust. The app attempts to clear its copy after 30 seconds or when the vault locks, provided the clipboard still contains the copied value.
 
+Open **Password generator** on the lock screen to generate a password without opening a vault. In the credential editor, choose **Open password generator** and **Use password** to fill the password field. The generator supports 12 to 256 characters and optional symbols.
+
+Choose **Review passwords** to check the unlocked vault for short and exactly reused passwords. Select a result to open the corresponding credential. The review runs locally and leaves the vault file unchanged.
+
 Choose **Lock vault** to end the session immediately. The app also locks after five minutes without keyboard or pointer input.
 
 Install Python 3.11 or later, Node.js 22.12 or later in the 22 series, a stable Rust toolchain, and the native packages listed in the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). Activate a Python virtual environment and run these commands from the repository root:

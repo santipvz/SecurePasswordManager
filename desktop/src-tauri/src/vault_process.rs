@@ -39,6 +39,7 @@ pub(crate) enum Error {
     WrongKey,
     FileError,
     EntryMissing,
+    GeneratorLength,
     EntryDuplicate,
     EntryInvalid,
     WriteConflict,
@@ -63,6 +64,11 @@ pub(crate) enum Operation {
         window: Option<String>,
     },
     List,
+    Generate {
+        length: u32,
+        symbols: bool,
+    },
+    Review,
     EntryNotes {
         name: String,
     },
@@ -111,7 +117,7 @@ impl Operation {
     }
 
     pub(crate) fn requires_session(&self) -> bool {
-        !matches!(self, Self::Status) && !self.opens_vault()
+        !matches!(self, Self::Status | Self::Generate { .. }) && !self.opens_vault()
     }
 
     pub(crate) fn writes_vault(&self) -> bool {
@@ -139,6 +145,11 @@ enum RequestOperation<'a> {
         window: Option<&'a str>,
     },
     List,
+    Generate {
+        length: u32,
+        symbols: bool,
+    },
+    Review,
     EntryNotes {
         name: &'a str,
     },
@@ -255,6 +266,14 @@ impl Process {
             let (request_operation, field_bytes) = match &operation {
                 Operation::Status => (RequestOperation::Status, 0),
                 Operation::List => (RequestOperation::List, 0),
+                Operation::Generate { length, symbols } => (
+                    RequestOperation::Generate {
+                        length: *length,
+                        symbols: *symbols,
+                    },
+                    0,
+                ),
+                Operation::Review => (RequestOperation::Review, 0),
                 Operation::Open { master } => (RequestOperation::Open { master }, master.len()),
                 Operation::Create { master } => (RequestOperation::Create { master }, master.len()),
                 Operation::OpenKey { pin, window } => {
@@ -298,7 +317,8 @@ impl Process {
                     )
                 }
             };
-            let path = path.filter(|_| !operation.requires_session());
+            let path =
+                path.filter(|_| matches!(operation, Operation::Status) || operation.opens_vault());
             let length = field_bytes + path.map_or(0, str::len);
             if length >= MAX_REQUEST {
                 return Err(Error::InputTooLarge);
@@ -357,6 +377,7 @@ impl Process {
                 "wrong_key" => Error::WrongKey,
                 "file_error" => Error::FileError,
                 "locked" => Error::Locked,
+                "generator_length" => Error::GeneratorLength,
                 "entry_missing" => Error::EntryMissing,
                 "entry_duplicate" => Error::EntryDuplicate,
                 "entry_invalid" => Error::EntryInvalid,

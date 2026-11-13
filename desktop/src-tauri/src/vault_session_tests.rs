@@ -104,6 +104,57 @@ async fn opens_both_existing_formats_without_modifying_them() {
 }
 
 #[tokio::test]
+async fn generates_while_locked_and_reviews_only_the_current_session() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let core = manifest.join("resources/vault-process/cpass-vault-process");
+    let dir = tempfile::tempdir().unwrap();
+    let vault = dir.path().join("review.spm");
+    let snapshot = fs::read(manifest.join("../../tests/fixtures/password-v1.spm")).unwrap();
+    fs::write(&vault, &snapshot).unwrap();
+    let session = VaultSession::new(core);
+
+    assert_eq!(session.generate(None, 12, false).await.unwrap().len(), 12);
+    assert_eq!(session.generate(None, 256, true).await.unwrap().len(), 256);
+    assert_eq!(
+        session.generate(None, 257, true).await.err(),
+        Some(Error::GeneratorLength)
+    );
+    let selection = session.begin_selection(None).unwrap();
+    let generation = selection.commit(Some(vault.clone()), false).unwrap();
+    assert_eq!(session.review(generation).await.err(), Some(Error::Locked));
+    session
+        .unlock(generation, MASTER.to_owned().into())
+        .await
+        .unwrap();
+    assert_eq!(
+        session.generate(None, 24, true).await.err(),
+        Some(Error::Locked)
+    );
+    assert_eq!(
+        session
+            .generate(Some(generation), 24, true)
+            .await
+            .unwrap()
+            .len(),
+        24
+    );
+    let findings = serde_json::to_value(session.review(generation).await.unwrap()).unwrap();
+    assert_eq!(
+        findings,
+        serde_json::json!({
+            "total": 1, "short": [], "reused": [], "minimum_length": 15,
+        })
+    );
+    session.lock().await;
+    assert_eq!(session.review(generation).await.err(), Some(Error::Locked));
+    assert_eq!(
+        session.generate(Some(generation), 24, true).await.err(),
+        Some(Error::Locked)
+    );
+    assert_eq!(fs::read(vault).unwrap(), snapshot);
+}
+
+#[tokio::test]
 async fn manual_lock_cancels_pending_and_rejects_late_unlocks() {
     let (dir, session) = fake_core(
         r#"    if operation == "open":

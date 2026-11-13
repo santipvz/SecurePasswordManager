@@ -118,6 +118,15 @@ pub(crate) struct Entry {
     url: String,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Review {
+    total: usize,
+    short: Vec<String>,
+    reused: Vec<Vec<String>>,
+    minimum_length: usize,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Notes {
@@ -414,6 +423,25 @@ impl VaultSession {
             .await
     }
 
+    pub(crate) async fn generate(
+        &self,
+        generation: Option<u64>,
+        length: u32,
+        symbols: bool,
+    ) -> Result<String, Error> {
+        self.request(
+            Operation::Generate { length, symbols },
+            generation,
+            |reply: Password, _| Ok(reply.password.text().to_owned()),
+        )
+        .await
+    }
+
+    pub(crate) async fn review(&self, generation: u64) -> Result<Review, Error> {
+        self.request(Operation::Review, Some(generation), |review, _| Ok(review))
+            .await
+    }
+
     pub(crate) async fn entry_notes(&self, generation: u64, name: String) -> Result<String, Error> {
         self.request(
             Operation::EntryNotes { name },
@@ -496,6 +524,13 @@ impl VaultSession {
             {
                 return Err(Error::Locked);
             }
+            // The editor must supply the unlocked session generation. A
+            // standalone generator request is valid only on the lock screen.
+            if matches!(operation, Operation::Generate { .. })
+                && expected.is_some() != state.deadline.is_some()
+            {
+                return Err(Error::Locked);
+            }
             if operation.opens_vault() {
                 if state.choosing {
                     return Err(Error::Busy);
@@ -568,7 +603,7 @@ impl VaultSession {
 }
 
 fn keep_process(error: Error, credential_request: bool) -> bool {
-    error == Error::InputTooLarge
+    matches!(error, Error::InputTooLarge | Error::GeneratorLength)
         || credential_request
             && matches!(
                 error,

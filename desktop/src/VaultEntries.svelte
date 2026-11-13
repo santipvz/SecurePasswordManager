@@ -1,7 +1,9 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core"
-  import { ArrowLeft, ChevronDown, ChevronRight, Copy, Eye, EyeOff, Pencil, Plus, Search, Trash2 } from "@lucide/svelte"
+  import { ArrowLeft, ChevronDown, ChevronRight, Copy, Eye, EyeOff, Pencil, Plus, Search, ShieldCheck, Trash2 } from "@lucide/svelte"
   import { onMount, tick } from "svelte"
+  import PasswordGenerator from "./PasswordGenerator.svelte"
+  import PasswordReview, { type Review } from "./PasswordReview.svelte"
 
   type Entry = { name: string; username: string; url: string }
 
@@ -26,6 +28,12 @@
     timed_out: "The vault process timed out. Reopen the vault to check your changes.",
   }
 
+  let generatorOpen = $state(false)
+  let reviewOpen = $state(false)
+  let reviewPending = $state(false)
+  let review = $state<Review>()
+  let reviewError = $state("")
+  let reviewButton = $state<HTMLButtonElement>()
   let search = $state("")
   let limit = $state(pageSize)
   let selected = $state<Entry>()
@@ -42,6 +50,7 @@
   let searchInput = $state<HTMLInputElement>()
   let nameInput = $state<HTMLInputElement>()
   let passwordInput = $state<HTMLInputElement>()
+  let generatorToggle = $state<HTMLButtonElement>()
   let detailHeading = $state<HTMLHeadingElement>()
   let cancelDelete = $state<HTMLButtonElement>()
   let lastEntryButton: HTMLButtonElement | undefined
@@ -68,6 +77,10 @@
     hidePassword()
     if (passwordInput) passwordInput.value = ""
     editor = undefined
+    generatorOpen = false
+    reviewOpen = false
+    review = undefined
+    reviewError = ""
     confirmation = false
     notes = undefined
     feedback = ""
@@ -96,18 +109,23 @@
     limit = pageSize
   }
 
+  function endsSession(reason: unknown) {
+    return typeof reason === "string"
+      && ["locked", "write_failed", "timed_out", "communication_failed", "process_unavailable"].includes(reason)
+  }
+
   function handleError(reason: unknown) {
     const code = typeof reason === "string" ? reason : ""
     const message = Object.hasOwn(messages, code) ? messages[code] : "Could not complete the vault request."
     if (code === "write_conflict") conflict = true
-    if (["locked", "write_failed", "timed_out", "communication_failed", "process_unavailable"].includes(code)) {
+    if (endsSession(code)) {
       void onSessionEnd(message)
     } else {
       error = message
     }
   }
 
-  async function showDetails(entry: Entry, button?: HTMLButtonElement) {
+  async function showDetails(entry: Entry, button?: HTMLButtonElement, focusDetail = false) {
     clearView()
     selected = entry
     lastEntryButton = button
@@ -115,7 +133,7 @@
     busy = true
     await tick()
     if (current !== viewRevision) return
-    if (matchMedia("(max-width: 760px)").matches) detailHeading?.focus()
+    if (focusDetail || matchMedia("(max-width: 760px)").matches) detailHeading?.focus()
     try {
       const result = await invoke<string>("vault_entry_notes", { generation, name: entry.name })
       if (current === viewRevision) notes = result
@@ -124,6 +142,57 @@
     } finally {
       busy = false
     }
+  }
+
+  async function runReview() {
+    if (busy || editor || reviewPending) return
+    clearView()
+    selected = undefined
+    reviewOpen = true
+    reviewPending = true
+    const current = viewRevision
+    try {
+      const findings = await invoke<Review>("vault_review", { generation })
+      if (current === viewRevision) review = findings
+    } catch (reason) {
+      if (current !== viewRevision) return
+      if (endsSession(reason)) {
+        handleError(reason)
+      } else {
+        reviewError = reason === "busy" ? messages.busy : "Could not review this vault. Try again."
+      }
+    } finally {
+      reviewPending = false
+    }
+  }
+
+  async function closeReview() {
+    clearView()
+    await tick()
+    reviewButton?.focus()
+  }
+
+  function selectFinding(name: string) {
+    const entry = entries.find((entry) => entry.name === name)
+    if (entry) {
+      search = ""
+      limit = pageSize
+      void showDetails(entry, undefined, true)
+    }
+  }
+
+  async function dismissGenerator() {
+    generatorOpen = false
+    await tick()
+    generatorToggle?.focus()
+  }
+
+  async function useGenerated(password: string) {
+    if (!passwordInput) return
+    passwordInput.value = password
+    generatorOpen = false
+    await tick()
+    passwordInput?.focus()
   }
 
   async function revealPassword() {
@@ -174,6 +243,8 @@
     error = ""
     feedback = ""
     confirmation = false
+    reviewOpen = false
+    review = undefined
     editor = mode
     notesEdited = false
     if (mode === "add") {
@@ -187,6 +258,7 @@
   async function closeEditor() {
     if (passwordInput) passwordInput.value = ""
     editor = undefined
+    generatorOpen = false
     viewRevision++
     error = ""
     await tick()
@@ -233,6 +305,7 @@
       search = ""
       limit = pageSize
       editor = undefined
+      generatorOpen = false
       selected = saved
       notes = updatedNotes
       feedback = "Credential saved."
@@ -287,6 +360,8 @@
     }
     if (event.key !== "Escape") return
     if (revealed !== undefined || (busy && selected && !editor)) hidePassword()
+    else if (reviewOpen) void closeReview()
+    else if (generatorOpen) void dismissGenerator()
     else if (!busy && editor) void closeEditor()
     else if (!busy && confirmation) void keepEntry()
     else if (!busy && selected) void closeDetails()
@@ -301,20 +376,22 @@
 <svelte:window onkeydown={shortcuts} onblur={hidePassword} onpagehide={hidePassword} />
 <svelte:document onvisibilitychange={hidePassword} />
 
-<main class="credential-workspace" class:detail-open={selected || editor}>
+<main class="credential-workspace" class:detail-open={selected || editor || reviewOpen}>
   <section class="collection" aria-labelledby="entry-list-heading">
     <div class="collection-heading entry-heading">
       <div>
         <h1 id="entry-list-heading">Vault entries</h1>
         <p class="muted" aria-live="polite">{matches.length} {matches.length === 1 ? "entry" : "entries"}</p>
       </div>
-      <button class="primary" disabled={busy || conflict} onclick={() => openEditor("add")}><Plus size={17} /> Add entry</button>
+      <button class="primary" disabled={busy || conflict || reviewPending} onclick={() => openEditor("add")}><Plus size={17} /> Add entry</button>
     </div>
     <label class="search-box">
       <Search size={17} />
       <input type="search" bind:this={searchInput} value={search} oninput={updateSearch}
-        readonly={Boolean(editor) || busy} aria-label="Search vault entries" placeholder="Search entries" />
+        readonly={Boolean(editor) || busy || reviewPending} aria-label="Search vault entries" placeholder="Search entries" />
     </label>
+    <button class="text-button review-action" bind:this={reviewButton} disabled={busy || Boolean(editor) || reviewPending}
+      onclick={runReview}><ShieldCheck size={17} /> Review passwords</button>
     {#if !selected && !editor && feedback}<p class="feedback" role="status">{feedback}</p>{/if}
     {#if conflict && !selected && !editor}<p class="error-note" role="alert">{messages.write_conflict}</p>{/if}
     {#if matches.length}
@@ -322,8 +399,8 @@
         {#each matches.slice(0, limit) as { entry } (entry.name)}
           <li>
             <button class:chosen={selected?.name === entry.name} aria-pressed={selected?.name === entry.name}
-              aria-disabled={Boolean(editor) || busy}
-              onclick={(event) => { if (!editor && !busy) void showDetails(entry, event.currentTarget) }}>
+              aria-disabled={Boolean(editor) || busy || reviewPending}
+              onclick={(event) => { if (!editor && !busy && !reviewPending) void showDetails(entry, event.currentTarget) }}>
               <span class="entry-mark">{entry.name.slice(0, 1).toUpperCase()}</span>
               <span class="entry-text">
                 <strong>{entry.name}</strong>
@@ -343,7 +420,10 @@
   </section>
 
   <section class="detail" aria-label="Credential details">
-    {#if editor}
+    {#if reviewOpen}
+      <PasswordReview result={review} pending={reviewPending} error={reviewError}
+        onClose={closeReview} onEntry={selectFinding} />
+    {:else if editor}
       <h2>{editor === "add" ? "Add credential" : "Edit credential"}</h2>
       <form class="credential-form" onsubmit={saveEntry} autocomplete="off">
         <label>Name <input name="name" value={selected?.name ?? ""} bind:this={nameInput} required /></label>
@@ -355,6 +435,9 @@
             autocomplete="off" autocapitalize="off" spellcheck={false} />
           {#if editor === "edit"}<small>Leave blank to keep the saved password.</small>{/if}
         </label>
+        <button class="secondary generator-toggle" type="button" bind:this={generatorToggle} aria-expanded={generatorOpen}
+          onclick={() => generatorOpen = !generatorOpen}>{generatorOpen ? "Hide generator" : "Open password generator"}</button>
+        {#if generatorOpen}<PasswordGenerator {generation} onUse={useGenerated} />{/if}
         <label>Notes <textarea name="notes" value={notes ?? ""} rows="3" oninput={() => notesEdited = true}></textarea></label>
         <div class="detail-actions">
           <button class="primary" type="submit" disabled={busy || conflict}>Save credential</button>
@@ -416,6 +499,8 @@
   }
   .entry-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .entry-heading .primary { flex: none; }
+  .review-action { margin-bottom: 8px; }
+  .generator-toggle { justify-self: start; }
   .credential-form { display: grid; gap: 13px; margin-top: 20px; }
   .credential-form label { display: grid; gap: 5px; font-weight: 600; }
   .credential-form small { color: var(--muted); font-weight: 400; }
