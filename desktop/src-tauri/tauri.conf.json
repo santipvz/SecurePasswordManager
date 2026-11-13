@@ -26,6 +26,11 @@
             "allow-vault-unlock-key",
             "allow-vault-select",
             "allow-vault-list",
+            "allow-vault-entry-notes",
+            "allow-vault-reveal",
+            "allow-vault-copy",
+            "allow-vault-save",
+            "allow-vault-delete",
             "allow-vault-lock",
             "allow-vault-active",
             "allow-vault-activity"

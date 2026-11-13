@@ -11,6 +11,12 @@ Requests are UTF-8 JSON objects on separate lines. The maximum request size is 6
 | `open_key` | Optional absolute `path`, optional FIDO2 `pin` on Linux and macOS, and optional hexadecimal parent `window` handle on Windows | `unlocked: true` and `has_security_key: true` after authenticating the registered FIDO2 credential. Windows obtains the PIN through its system prompt. |
 | `create` | Absolute `path` and `master` password | `unlocked: true` and `has_security_key: false` after creating and opening a new encrypted vault. An existing file is preserved. |
 | `list` | Optional `query` string | `entries` containing only `name`, `username`, and `url`. Requires an unlocked session. |
+| `entry_notes` | Credential `name` | Only the requested credential's `notes`. |
+| `entry_password` | Credential `name` | Only the requested credential's `password`. Rust consumes the value locally for clipboard requests. |
+| `save_entry` | `name`, optional `username`, `url` and `notes`, optional `previous` name and `password` | Metadata of the saved credential. Omit `previous` to create. On edits, omit `password` to preserve it. |
+| `delete_entry` | Credential `name` | `deleted: true` after saving the deletion. |
 | `lock` | None | `unlocked: false`. Drops the current session. |
 
 Omit the path to use the platform's default vault path. Opening a vault discards the previous session before attempting authentication. EOF signals cancellation of any pending FIDO2 operation, ends the process, and releases the session. The caller discards replies from cancelled sessions and terminates the process if it fails to exit within the cancellation grace period. Only one request is processed at a time. Keep request and response bodies out of logs.
+
+Credential commands require an unlocked session. Writes use the same conflict-checked encrypted storage as the CLI. List and write replies contain no passwords or notes.

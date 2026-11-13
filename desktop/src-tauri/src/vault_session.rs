@@ -1,5 +1,6 @@
 use std::{
     path::{Path, PathBuf},
+    sync::Arc,
     time::Duration,
 };
 
@@ -10,7 +11,10 @@ use tokio::{
 };
 use zeroize::Zeroizing;
 
-use crate::vault_process::{Error, Operation, Process};
+use crate::{
+    vault_clipboard::VaultClipboard,
+    vault_process::{CredentialInput, Error, Operation, Process, Secret},
+};
 
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -108,10 +112,28 @@ pub(crate) struct Entries {
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct Entry {
+pub(crate) struct Entry {
     name: String,
     username: String,
     url: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Notes {
+    notes: Secret,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Password {
+    password: Secret,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Deleted {
+    deleted: bool,
 }
 
 pub(crate) struct VaultSession {
@@ -120,6 +142,7 @@ pub(crate) struct VaultSession {
     state: watch::Sender<Session>,
     idle_timeout: Duration,
     request_timeout: Duration,
+    clipboard: Arc<VaultClipboard>,
     #[cfg(test)]
     test_directory: Option<PathBuf>,
 }
@@ -132,6 +155,7 @@ impl VaultSession {
             state: watch::Sender::new(Session::default()),
             idle_timeout: IDLE_TIMEOUT,
             request_timeout: REQUEST_TIMEOUT,
+            clipboard: Arc::default(),
             #[cfg(test)]
             test_directory: None,
         }
@@ -238,12 +262,36 @@ impl VaultSession {
     pub(crate) async fn lock(&self) -> u64 {
         self.invalidate(None, false);
         let generation = self.state.borrow().generation;
-        self.stop_stale().await;
+        tokio::join!(self.stop_stale(), self.clean_clipboard());
         generation
     }
 
     pub(crate) fn close(&self) {
         self.invalidate(None, true);
+    }
+
+    pub(crate) async fn clean_clipboard(&self) {
+        let clipboard = Arc::clone(&self.clipboard);
+        let state = self.state.subscribe();
+        let _ = tokio::task::spawn_blocking(move || {
+            clipboard.clean(|generation| clipboard_session_active(&state, generation));
+        })
+        .await;
+    }
+
+    pub(crate) async fn monitor_clipboard(&self) {
+        let mut state = self.state.subscribe();
+        let mut interval = tokio::time::interval(Duration::from_millis(150));
+        loop {
+            tokio::select! {
+                _ = async { drop(state.wait_for(|state| state.closed).await) } => break,
+                _ = interval.tick() => {
+                    if self.clipboard.needs_cleanup(|generation| self.active(generation)) {
+                        self.clean_clipboard().await;
+                    }
+                }
+            }
+        }
     }
 
     pub(crate) async fn stop_stale(&self) {
@@ -366,6 +414,68 @@ impl VaultSession {
             .await
     }
 
+    pub(crate) async fn entry_notes(&self, generation: u64, name: String) -> Result<String, Error> {
+        self.request(
+            Operation::EntryNotes { name },
+            Some(generation),
+            |reply: Notes, _| Ok(reply.notes.text().to_owned()),
+        )
+        .await
+    }
+
+    pub(crate) async fn reveal(&self, generation: u64, name: String) -> Result<String, Error> {
+        self.request(
+            Operation::EntryPassword { name },
+            Some(generation),
+            |reply: Password, _| Ok(reply.password.text().to_owned()),
+        )
+        .await
+    }
+
+    pub(crate) async fn copy(&self, generation: u64, name: String) -> Result<(), Error> {
+        let password = self
+            .request(
+                Operation::EntryPassword { name },
+                Some(generation),
+                |reply: Password, _| Ok(reply.password),
+            )
+            .await?;
+        let clipboard = Arc::clone(&self.clipboard);
+        let state = self.state.subscribe();
+        tokio::task::spawn_blocking(move || {
+            clipboard.copy(generation, password, |generation| {
+                clipboard_session_active(&state, generation)
+            })
+        })
+        .await
+        .map_err(|_| Error::ClipboardUnavailable)?
+    }
+
+    pub(crate) async fn save(
+        &self,
+        generation: u64,
+        entry: CredentialInput,
+    ) -> Result<Entry, Error> {
+        self.request(Operation::SaveEntry(entry), Some(generation), |entry, _| {
+            Ok(entry)
+        })
+        .await
+    }
+
+    pub(crate) async fn delete(&self, generation: u64, name: String) -> Result<(), Error> {
+        self.request(
+            Operation::DeleteEntry { name },
+            Some(generation),
+            |reply: Deleted, _| {
+                reply
+                    .deleted
+                    .then_some(())
+                    .ok_or(Error::CommunicationFailed)
+            },
+        )
+        .await
+    }
+
     async fn request<T: DeserializeOwned, U>(
         &self,
         operation: Operation,
@@ -382,7 +492,7 @@ impl VaultSession {
             if state.closed
                 || state.generation != generation
                 || expected.is_some_and(|expected| expected != generation)
-                || (matches!(operation, Operation::List) && state.deadline.is_none())
+                || (operation.requires_session() && state.deadline.is_none())
             {
                 return Err(Error::Locked);
             }
@@ -406,7 +516,7 @@ impl VaultSession {
 
         if slot.is_none() {
             // A missing process must never recreate an unlocked session.
-            if matches!(operation, Operation::List) {
+            if operation.requires_session() {
                 self.invalidate(Some(generation), false);
                 return Err(Error::Locked);
             }
@@ -419,7 +529,8 @@ impl VaultSession {
         }
         let mut child = slot.take().ok_or(Error::ProcessUnavailable)?;
         let key_request = matches!(operation, Operation::OpenKey { .. });
-        let allow_cleanup = key_request || matches!(operation, Operation::Create { .. });
+        let allow_cleanup = key_request || operation.writes_vault();
+        let credential_request = operation.requires_session();
         let request_timeout = if key_request {
             KEY_TIMEOUT
         } else {
@@ -446,7 +557,7 @@ impl VaultSession {
             result
         });
 
-        if matches!(result, Err(error) if error != Error::InputTooLarge) {
+        if matches!(result, Err(error) if !keep_process(error, credential_request)) {
             self.invalidate(Some(generation), false);
             child.stop(allow_cleanup).await;
         } else {
@@ -454,6 +565,26 @@ impl VaultSession {
         }
         result
     }
+}
+
+fn keep_process(error: Error, credential_request: bool) -> bool {
+    error == Error::InputTooLarge
+        || credential_request
+            && matches!(
+                error,
+                Error::EntryMissing
+                    | Error::EntryDuplicate
+                    | Error::EntryInvalid
+                    | Error::WriteConflict
+            )
+}
+
+fn clipboard_session_active(state: &watch::Receiver<Session>, generation: u64) -> bool {
+    let state = state.borrow();
+    state.generation == generation
+        && state
+            .deadline
+            .is_some_and(|deadline| Instant::now() < deadline)
 }
 
 #[cfg(all(test, target_os = "linux"))]

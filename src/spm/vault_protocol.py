@@ -10,7 +10,10 @@ from threading import Event, Thread
 from typing import BinaryIO
 
 from .security_key import SecurityKeyError, open_security_key
-from .vault import MIN_MASTER_LENGTH, Vault, VaultError, default_vault_path, vault_has_security_key
+from .vault import (
+    MIN_MASTER_LENGTH, Entry, Vault, VaultConflict, VaultError, default_vault_path,
+    vault_has_security_key,
+)
 
 VERSION = 1
 MAX_REQUEST_BYTES = 64 * 1024
@@ -21,9 +24,21 @@ OPERATIONS = {
     "open_key": {"path", "pin", "window"},
     "create": {"path", "master"},
     "list": {"query"},
+    "entry_notes": {"name"},
+    "entry_password": {"name"},
+    "save_entry": {"previous", "name", "password", "username", "url", "notes"},
+    "delete_entry": {"name"},
     "lock": set(),
 }
 REQUIRED_FIELDS = {"version", "id", "operation"}
+OPERATION_REQUIRED_FIELDS = {
+    "open": {"master"},
+    "create": {"path", "master"},
+    "entry_notes": {"name"},
+    "entry_password": {"name"},
+    "save_entry": {"name"},
+    "delete_entry": {"name"},
+}
 ERROR_MESSAGES = {
     "invalid_request": "Invalid request.",
     "request_too_large": "Request exceeds 64 KiB.",
@@ -44,6 +59,11 @@ ERROR_MESSAGES = {
     "pin_invalid": "The FIDO2 PIN is incorrect.",
     "pin_required": "Enter the FIDO2 key PIN.",
     "wrong_key": "The connected key has no credential for this vault.",
+    "entry_missing": "The credential no longer exists.",
+    "entry_duplicate": "A credential with that name already exists.",
+    "entry_invalid": "Enter a name and password for the credential.",
+    "write_conflict": "The vault changed on disk. Lock and reopen it before making changes.",
+    "write_failed": "Could not confirm the vault was saved. Check the file and reopen the vault.",
 }
 
 
@@ -86,9 +106,7 @@ def _validate(request: dict) -> str:
     for field in OPERATIONS[operation] & request.keys():
         if not isinstance(request[field], str):
             raise ProtocolError("invalid_request")
-    if operation in {"open", "create"} and "master" not in request:
-        raise ProtocolError("invalid_request")
-    if operation == "create" and "path" not in request:
+    if not OPERATION_REQUIRED_FIELDS.get(operation, set()) <= request.keys():
         raise ProtocolError("invalid_request")
     if "window" in request and (
         sys.platform != "win32" or not re.fullmatch(r"[1-9a-f][0-9a-f]{0,15}", request["window"])
@@ -113,17 +131,13 @@ class _Session:
                 return self._status(request)
             case "open" | "open_key" | "create":
                 return self._open(operation, request)
-            case "list":
-                if self._vault is None:
-                    raise ProtocolError("locked")
-                return {"entries": [
-                    {"name": entry.name, "username": entry.username, "url": entry.url}
-                    for entry in self._vault.list(request.get("query", ""))
-                ]}
             case "lock":
                 self._vault = None
                 return {"unlocked": False}
-        raise ProtocolError("unknown_operation")
+            case _:
+                if self._vault is None:
+                    raise ProtocolError("locked")
+                return _credential_request(self._vault, operation, request)
 
     def _open(self, operation: str, request: dict) -> dict:
         self._vault = None
@@ -186,6 +200,65 @@ class _Session:
             "unlocked": unlocked,
             "has_security_key": exists and vault_has_security_key(path),
         }
+
+
+def _metadata(entry: Entry) -> dict:
+    return {"name": entry.name, "username": entry.username, "url": entry.url}
+
+
+def _entry(vault: Vault, name: str) -> Entry:
+    try:
+        return vault.get(name)
+    except VaultError as error:
+        raise ProtocolError("entry_missing") from error
+
+
+def _save_entry(vault: Vault, request: dict) -> dict:
+    previous = _entry(vault, request["previous"]) if "previous" in request else None
+    password = request.get("password", previous.password if previous else "")
+    try:
+        entry = Entry(
+            name=request["name"], password=password, username=request.get("username", ""),
+            url=request.get("url", ""), notes=request.get("notes", ""),
+        )
+    except VaultError as error:
+        raise ProtocolError("entry_invalid") from error
+
+    if previous is None or previous.name.casefold() != entry.name.casefold():
+        try:
+            vault.get(entry.name)
+        except VaultError:
+            pass  # An unused name can be added or used for the rename.
+        else:
+            raise ProtocolError("entry_duplicate")
+    if previous is None:
+        vault.add([entry])
+    else:
+        vault.edit(previous.name, entry)
+    return _metadata(entry)
+
+
+def _credential_request(vault: Vault, operation: str, request: dict) -> dict:
+    try:
+        match operation:
+            case "list":
+                entries = vault.list(request.get("query", ""))
+                return {"entries": [_metadata(entry) for entry in entries]}
+            case "entry_notes":
+                return {"notes": _entry(vault, request["name"]).notes}
+            case "entry_password":
+                return {"password": _entry(vault, request["name"]).password}
+            case "save_entry":
+                return _save_entry(vault, request)
+            case "delete_entry":
+                entry = _entry(vault, request["name"])
+                vault.delete(entry.name)
+                return {"deleted": True}
+    except VaultConflict as error:
+        raise ProtocolError("write_conflict") from error
+    except (OSError, UnicodeError, VaultError) as error:
+        raise ProtocolError("write_failed") from error
+    raise ProtocolError("unknown_operation")
 
 
 def _path(request: dict, *, for_create: bool = False) -> Path:

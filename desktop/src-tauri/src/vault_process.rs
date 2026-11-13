@@ -38,6 +38,13 @@ pub(crate) enum Error {
     PinRequired,
     WrongKey,
     FileError,
+    EntryMissing,
+    EntryDuplicate,
+    EntryInvalid,
+    WriteConflict,
+    WriteFailed,
+    ClipboardUnavailable,
+    ClipboardUnsupported,
     ProcessUnavailable,
     CommunicationFailed,
     TimedOut,
@@ -56,6 +63,43 @@ pub(crate) enum Operation {
         window: Option<String>,
     },
     List,
+    EntryNotes {
+        name: String,
+    },
+    EntryPassword {
+        name: String,
+    },
+    SaveEntry(CredentialInput),
+    DeleteEntry {
+        name: String,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CredentialInput {
+    previous: Option<String>,
+    name: String,
+    username: String,
+    url: String,
+    notes: Secret,
+    password: Option<Secret>,
+}
+
+#[derive(Deserialize)]
+#[serde(from = "String")]
+pub(crate) struct Secret(Zeroizing<String>);
+
+impl From<String> for Secret {
+    fn from(value: String) -> Self {
+        Self(Zeroizing::new(value))
+    }
+}
+
+impl Secret {
+    pub(crate) fn text(&self) -> &str {
+        self.0.as_str()
+    }
 }
 
 impl Operation {
@@ -63,6 +107,17 @@ impl Operation {
         matches!(
             self,
             Self::Open { .. } | Self::Create { .. } | Self::OpenKey { .. }
+        )
+    }
+
+    pub(crate) fn requires_session(&self) -> bool {
+        !matches!(self, Self::Status) && !self.opens_vault()
+    }
+
+    pub(crate) fn writes_vault(&self) -> bool {
+        matches!(
+            self,
+            Self::Create { .. } | Self::SaveEntry(_) | Self::DeleteEntry { .. }
         )
     }
 }
@@ -84,6 +139,25 @@ enum RequestOperation<'a> {
         window: Option<&'a str>,
     },
     List,
+    EntryNotes {
+        name: &'a str,
+    },
+    EntryPassword {
+        name: &'a str,
+    },
+    SaveEntry {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        previous: Option<&'a str>,
+        name: &'a str,
+        username: &'a str,
+        url: &'a str,
+        notes: &'a str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        password: Option<&'a str>,
+    },
+    DeleteEntry {
+        name: &'a str,
+    },
 }
 
 #[derive(Serialize)]
@@ -178,7 +252,7 @@ impl Process {
         // JSON numbers must round-trip through the protocol's safe integer range.
         self.next_id = (id % 9_007_199_254_740_991) + 1;
         let mut line = {
-            let (request_operation, secret_length) = match &operation {
+            let (request_operation, field_bytes) = match &operation {
                 Operation::Status => (RequestOperation::Status, 0),
                 Operation::List => (RequestOperation::List, 0),
                 Operation::Open { master } => (RequestOperation::Open { master }, master.len()),
@@ -193,9 +267,39 @@ impl Process {
                         pin.map_or(0, str::len),
                     )
                 }
+                Operation::EntryNotes { name } => {
+                    (RequestOperation::EntryNotes { name }, name.len())
+                }
+                Operation::EntryPassword { name } => {
+                    (RequestOperation::EntryPassword { name }, name.len())
+                }
+                Operation::DeleteEntry { name } => {
+                    (RequestOperation::DeleteEntry { name }, name.len())
+                }
+                Operation::SaveEntry(entry) => {
+                    let previous = entry.previous.as_deref();
+                    let password = entry.password.as_ref().map(Secret::text);
+                    let notes = entry.notes.text();
+                    (
+                        RequestOperation::SaveEntry {
+                            previous,
+                            name: &entry.name,
+                            username: &entry.username,
+                            url: &entry.url,
+                            notes,
+                            password,
+                        },
+                        previous.map_or(0, str::len)
+                            + entry.name.len()
+                            + entry.username.len()
+                            + entry.url.len()
+                            + notes.len()
+                            + password.map_or(0, str::len),
+                    )
+                }
             };
-            let path = path.filter(|_| !matches!(operation, Operation::List));
-            let length = secret_length + path.map_or(0, str::len);
+            let path = path.filter(|_| !operation.requires_session());
+            let length = field_bytes + path.map_or(0, str::len);
             if length >= MAX_REQUEST {
                 return Err(Error::InputTooLarge);
             }
@@ -206,7 +310,7 @@ impl Process {
                 operation: request_operation,
             };
             // JSON escaping expands an input byte to at most six bytes.
-            let mut line = Zeroizing::new(Vec::with_capacity(128 + 6 * length));
+            let mut line = Zeroizing::new(Vec::with_capacity(256 + 6 * length));
             serde_json::to_writer(&mut *line, &request).map_err(|_| Error::CommunicationFailed)?;
             line
         };
@@ -253,6 +357,11 @@ impl Process {
                 "wrong_key" => Error::WrongKey,
                 "file_error" => Error::FileError,
                 "locked" => Error::Locked,
+                "entry_missing" => Error::EntryMissing,
+                "entry_duplicate" => Error::EntryDuplicate,
+                "entry_invalid" => Error::EntryInvalid,
+                "write_conflict" => Error::WriteConflict,
+                "write_failed" => Error::WriteFailed,
                 _ => Error::CommunicationFailed,
             }),
             _ => Err(Error::CommunicationFailed),

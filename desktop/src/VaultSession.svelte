@@ -1,7 +1,8 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core"
-  import { FolderOpen, KeyRound, LockKeyhole, Moon, Plus, Search, ShieldCheck, Sun } from "@lucide/svelte"
+  import { FolderOpen, KeyRound, LockKeyhole, Moon, Plus, ShieldCheck, Sun } from "@lucide/svelte"
   import { onMount, tick } from "svelte"
+  import VaultEntries from "./VaultEntries.svelte"
 
   type Status = {
     exists: boolean
@@ -45,7 +46,6 @@
   let status = $state<Status>()
   let generation = $state<number>()
   let entries = $state<Entry[]>([])
-  let search = $state("")
   let feedback = $state("")
   let method = $state<"password" | "key">("password")
   let passwordInput = $state<HTMLInputElement>()
@@ -56,15 +56,8 @@
   let cancelButton = $state<HTMLButtonElement>()
   const keyReady = $derived(status?.exists && status.has_security_key && !status.creating)
   const creating = $derived(status?.creating && !status.exists)
-  let searchInput = $state<HTMLInputElement>()
   let revision = 0
   let lastActivity = -Infinity
-
-  const matches = $derived(entries.filter((entry) =>
-    [entry.name, entry.username, entry.url].some((text) =>
-      text.toLowerCase().includes(search.trim().toLowerCase()),
-    ),
-  ))
 
   function errorMessage(error: unknown) {
     return typeof error === "string" && Object.hasOwn(messages, error)
@@ -130,7 +123,6 @@
     const current = ++revision
     generation = undefined
     entries = []
-    search = ""
     clearInputs()
     phase = "locking"
     feedback = message
@@ -196,8 +188,6 @@
       lastActivity = -Infinity
       entries = metadata.entries
       phase = "unlocked"
-      await tick()
-      if (revision === current) searchInput?.focus()
     } catch (error) {
       if (revision === current) await endSession(errorMessage(error))
     }
@@ -247,30 +237,8 @@
     </div>
   </header>
 
-  {#if phase === "unlocked"}
-    <main class="collection live-collection">
-      <div class="collection-heading">
-        <h1>Vault entries</h1>
-        <p class="muted">{entries.length} {entries.length === 1 ? "entry" : "entries"}</p>
-      </div>
-      <label class="search-box">
-        <Search size={17} />
-        <input type="search" bind:this={searchInput} bind:value={search} aria-label="Search vault entries" placeholder="Search entries" />
-      </label>
-      {#if matches.length}
-        <ul class="entries live-entries">
-          {#each matches as entry}
-            <li>
-              <strong>{entry.name}</strong>
-              {#if entry.username}<span>{entry.username}</span>{/if}
-              {#if entry.url}<span>{entry.url}</span>{/if}
-            </li>
-          {/each}
-        </ul>
-      {:else}
-        <p class="empty">{entries.length ? "No matching entries." : "This vault has no entries."}</p>
-      {/if}
-    </main>
+  {#if phase === "unlocked" && generation !== undefined}
+    <VaultEntries {generation} bind:entries onSessionEnd={endSession} />
   {:else}
     <main class="welcome">
       <section class="unlock-card" aria-labelledby="vault-title">
@@ -360,13 +328,4 @@
     background: var(--surface);
     color: var(--text);
   }
-  .live-collection { max-width: 820px; margin-inline: auto; }
-  .live-entries li {
-    display: grid;
-    gap: 2px;
-    padding: 12px 8px;
-    border-bottom: 1px solid var(--line);
-    overflow-wrap: anywhere;
-  }
-  .live-entries li span { color: var(--muted); }
 </style>
