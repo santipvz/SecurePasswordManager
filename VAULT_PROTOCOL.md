@@ -8,7 +8,9 @@ Requests are UTF-8 JSON objects on separate lines. The maximum request size is 6
 | --- | --- | --- |
 | `status` | Optional absolute `path` | `exists`, `unlocked`, and `has_security_key` booleans for that path. The FIDO2 indicator is based on the file header before authentication. |
 | `open` | `master` password and optional absolute `path` | `unlocked: true` and `has_security_key` after authenticating either existing vault format with its master password. |
+| `open_key` | Optional absolute `path`, optional FIDO2 `pin` on Linux and macOS, and optional hexadecimal parent `window` handle on Windows | `unlocked: true` and `has_security_key: true` after authenticating the registered FIDO2 credential. Windows obtains the PIN through its system prompt. |
+| `create` | Absolute `path` and `master` password | `unlocked: true` and `has_security_key: false` after creating and opening a new encrypted vault. An existing file is preserved. |
 | `list` | Optional `query` string | `entries` containing only `name`, `username`, and `url`. Requires an unlocked session. |
 | `lock` | None | `unlocked: false`. Drops the current session. |
 
-Omit the path to use the platform's default vault path. Opening a vault discards the previous session before attempting authentication. EOF ends the process and releases the session. Only one request is processed at a time. Keep request and response bodies out of logs. FIDO2 device interaction is part of the desktop unlock integration.
+Omit the path to use the platform's default vault path. Opening a vault discards the previous session before attempting authentication. EOF signals cancellation of any pending FIDO2 operation, ends the process, and releases the session. The caller discards replies from cancelled sessions and terminates the process if it fails to exit within the cancellation grace period. Only one request is processed at a time. Keep request and response bodies out of logs.
