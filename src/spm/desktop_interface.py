@@ -122,6 +122,7 @@ class DesktopApp:  # pylint: disable=too-many-instance-attributes
         self.root.destroy()
 
     def _new_view(self, *, centered=False):
+        self._hide_password()
         if self.view is not None:
             self.view.destroy()
         self.view = ttk.Frame(self.root, padding=24)
@@ -130,8 +131,6 @@ class DesktopApp:  # pylint: disable=too-many-instance-attributes
 
     def lock(self):
         """Discard the unlocked snapshot and return to the master password form."""
-        if self.reveal_timer is not None:
-            self._hide_password()
         if self.dialog is not None:
             self.dialog.destroy()
             self.dialog = None
