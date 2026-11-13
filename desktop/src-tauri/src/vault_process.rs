@@ -43,6 +43,13 @@ pub(crate) enum Error {
     EntryDuplicate,
     EntryInvalid,
     WriteConflict,
+    BackupFailed,
+    ImportFailed,
+    InvalidImport,
+    ImportCount,
+    IncorrectMaster,
+    AlreadyRegistered,
+    NoRegisteredKey,
     WriteFailed,
     ClipboardUnavailable,
     ClipboardUnsupported,
@@ -69,6 +76,24 @@ pub(crate) enum Operation {
         symbols: bool,
     },
     Review,
+    Backup {
+        destination: String,
+    },
+    ImportLegacy {
+        paths: Vec<String>,
+    },
+    ChangeMaster {
+        master: Secret,
+        new_master: Secret,
+    },
+    RegisterKey {
+        master: Secret,
+        pin: Option<Secret>,
+        window: Option<String>,
+    },
+    RemoveKey {
+        master: Secret,
+    },
     EntryNotes {
         name: String,
     },
@@ -123,7 +148,14 @@ impl Operation {
     pub(crate) fn writes_vault(&self) -> bool {
         matches!(
             self,
-            Self::Create { .. } | Self::SaveEntry(_) | Self::DeleteEntry { .. }
+            Self::Create { .. }
+                | Self::SaveEntry(_)
+                | Self::DeleteEntry { .. }
+                | Self::Backup { .. }
+                | Self::ImportLegacy { .. }
+                | Self::ChangeMaster { .. }
+                | Self::RegisterKey { .. }
+                | Self::RemoveKey { .. }
         )
     }
 }
@@ -150,6 +182,26 @@ enum RequestOperation<'a> {
         symbols: bool,
     },
     Review,
+    Backup {
+        destination: &'a str,
+    },
+    ImportLegacy {
+        paths: &'a [String],
+    },
+    ChangeMaster {
+        master: &'a str,
+        new_master: &'a str,
+    },
+    RegisterKey {
+        master: &'a str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pin: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        window: Option<&'a str>,
+    },
+    RemoveKey {
+        master: &'a str,
+    },
     EntryNotes {
         name: &'a str,
     },
@@ -274,6 +326,41 @@ impl Process {
                     0,
                 ),
                 Operation::Review => (RequestOperation::Review, 0),
+                Operation::Backup { destination } => {
+                    (RequestOperation::Backup { destination }, destination.len())
+                }
+                Operation::ImportLegacy { paths } => (
+                    RequestOperation::ImportLegacy { paths },
+                    paths.iter().map(|path| path.len() + 3).sum(),
+                ),
+                Operation::ChangeMaster { master, new_master } => (
+                    RequestOperation::ChangeMaster {
+                        master: master.text(),
+                        new_master: new_master.text(),
+                    },
+                    master.text().len() + new_master.text().len(),
+                ),
+                Operation::RegisterKey {
+                    master,
+                    pin,
+                    window,
+                } => {
+                    let pin = pin.as_ref().map(Secret::text);
+                    (
+                        RequestOperation::RegisterKey {
+                            master: master.text(),
+                            pin,
+                            window: window.as_deref(),
+                        },
+                        master.text().len() + pin.map_or(0, str::len),
+                    )
+                }
+                Operation::RemoveKey { master } => (
+                    RequestOperation::RemoveKey {
+                        master: master.text(),
+                    },
+                    master.text().len(),
+                ),
                 Operation::Open { master } => (RequestOperation::Open { master }, master.len()),
                 Operation::Create { master } => (RequestOperation::Create { master }, master.len()),
                 Operation::OpenKey { pin, window } => {
@@ -381,6 +468,11 @@ impl Process {
                 "entry_missing" => Error::EntryMissing,
                 "entry_duplicate" => Error::EntryDuplicate,
                 "entry_invalid" => Error::EntryInvalid,
+                "backup_failed" => Error::BackupFailed,
+                "import_failed" => Error::ImportFailed,
+                "incorrect_master" => Error::IncorrectMaster,
+                "already_registered" => Error::AlreadyRegistered,
+                "no_registered_key" => Error::NoRegisteredKey,
                 "write_conflict" => Error::WriteConflict,
                 "write_failed" => Error::WriteFailed,
                 _ => Error::CommunicationFailed,

@@ -155,6 +155,78 @@ async fn generates_while_locked_and_reviews_only_the_current_session() {
 }
 
 #[tokio::test]
+async fn settings_backup_restore_and_master_change_bind_to_the_session() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let core = manifest.join("resources/vault-process/cpass-vault-process");
+    let dir = tempfile::tempdir().unwrap();
+    let vault = dir.path().join("active.spm");
+    let backup = dir.path().join("backup.spm");
+    let snapshot = fs::read(manifest.join("../../tests/fixtures/fido2-v2.spm")).unwrap();
+    fs::write(&vault, &snapshot).unwrap();
+    let session = VaultSession::new(core);
+    let selection = session.begin_selection(None).unwrap();
+    let generation = selection.commit(Some(vault.clone()), false).unwrap();
+    assert_eq!(
+        session.backup(generation, backup.clone()).await.err(),
+        Some(Error::Locked)
+    );
+    session
+        .unlock(generation, MASTER.to_owned().into())
+        .await
+        .unwrap();
+    session.backup(generation, backup.clone()).await.unwrap();
+    assert_eq!(
+        session.backup(generation, backup.clone()).await.err(),
+        Some(Error::BackupFailed)
+    );
+    assert_eq!(fs::read(&backup).unwrap(), snapshot);
+
+    let new_master = "Synthetic new master passphrase";
+    let methods = session
+        .update_unlock_methods(
+            generation,
+            Operation::ChangeMaster {
+                master: MASTER.to_owned().into(),
+                new_master: new_master.to_owned().into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(!methods.has_security_key);
+    assert!(!session.active(generation));
+    assert_eq!(session.list(generation).await.err(), Some(Error::Locked));
+    assert_eq!(
+        session
+            .select_backup(generation, backup.clone())
+            .await
+            .err(),
+        Some(Error::Locked)
+    );
+
+    let status = session.status().await.unwrap();
+    session
+        .unlock(status.generation, new_master.to_owned().into())
+        .await
+        .unwrap();
+    session
+        .select_backup(status.generation, backup.clone())
+        .await
+        .unwrap();
+    let status = session.status().await.unwrap();
+    assert!(status.has_security_key);
+    session
+        .unlock(status.generation, MASTER.to_owned().into())
+        .await
+        .unwrap();
+    assert_eq!(
+        session.list(status.generation).await.unwrap().entries.len(),
+        1
+    );
+    assert_eq!(fs::read(backup).unwrap(), snapshot);
+    session.lock().await;
+}
+
+#[tokio::test]
 async fn manual_lock_cancels_pending_and_rejects_late_unlocks() {
     let (dir, session) = fake_core(
         r#"    if operation == "open":
