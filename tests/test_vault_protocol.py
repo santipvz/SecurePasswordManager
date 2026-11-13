@@ -14,6 +14,7 @@ from time import monotonic, sleep
 from unittest.mock import Mock, patch
 
 from spm.security_key import SecurityKeyError
+from spm.vault import Entry, Vault
 from spm.vault_protocol import MAX_REQUEST_BYTES, serve
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -199,6 +200,70 @@ class VaultProtocolTests(unittest.TestCase):
             )
         self.assertEqual(replies[0]["error"]["code"], "key_interrupted")
         device.derive.assert_called_once()
+
+    def test_credential_actions_are_scoped_and_preserve_existing_password(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "entries.spm"
+            Vault.create(path, MASTER)
+            result, replies = self.run_process(b"".join([
+                frame(1, "entry_password", name="example"),
+                frame(2, "save_entry", name="example", password="blocked"),
+                frame(3, "open", path=str(path), master=MASTER),
+                frame(4, "save_entry", name="Example", password="synthetic secret", notes="private note"),
+                frame(5, "save_entry", name="example", password="duplicate"),
+                frame(6, "save_entry", previous="Example", name="Renamed", username="local-user",
+                      url="https://example.test", notes="private note"),
+                frame(7, "list", query="LOCAL-USER"),
+                frame(8, "entry_notes", name="Renamed"),
+                frame(9, "entry_password", name="Renamed"),
+                frame(10, "lock"),
+                frame(11, "delete_entry", name="Renamed"),
+            ]))
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual([reply.get("error", {}).get("code") for reply in replies], [
+                "locked", "locked", None, None, "entry_duplicate", None, None,
+                None, None, None, "locked",
+            ])
+            metadata = {"name": "Renamed", "username": "local-user", "url": "https://example.test"}
+            self.assertEqual(replies[5]["result"], metadata)
+            self.assertEqual(replies[6]["result"], {"entries": [metadata]})
+            self.assertEqual(replies[7]["result"], {"notes": "private note"})
+            self.assertEqual(replies[8]["result"], {"password": "synthetic secret"})
+            self.assertEqual(result.stdout.count(b"synthetic secret"), 1)
+            self.assertEqual(result.stdout.count(b"private note"), 1)
+            vault = Vault(path, MASTER)
+            self.assertEqual(vault.get("Renamed").password, "synthetic secret")
+            self.assertNotIn(b"synthetic secret", path.read_bytes())
+            _, replies = self.run_process(
+                frame(1, "open", path=str(path), master=MASTER)
+                + frame(2, "delete_entry", name="Renamed")
+                + frame(3, "entry_password", name="Renamed")
+            )
+            self.assertTrue(replies[1]["result"]["deleted"])
+            self.assertEqual(replies[2]["error"]["code"], "entry_missing")
+            self.assertEqual(Vault(path, MASTER).list(), [])
+
+    def test_conflicting_credential_write_preserves_other_writers_snapshot(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "conflict.spm"
+            Vault.create(path, MASTER)
+            with subprocess.Popen(
+                [sys.executable, "-m", "spm.vault_protocol"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            ) as process:
+                process.stdin.write(frame(1, "open", path=str(path), master=MASTER))
+                process.stdin.flush()
+                self.assertTrue(json.loads(process.stdout.readline())["result"]["unlocked"])
+                Vault(path, MASTER).add([Entry("External", "external test password")])
+                snapshot = path.read_bytes()
+                process.stdin.write(frame(2, "save_entry", name="Stale", password="local test password"))
+                process.stdin.close()
+                reply = json.loads(process.stdout.readline())
+                self.assertEqual(reply["error"]["code"], "write_conflict")
+                self.assertEqual(process.wait(timeout=5), 0)
+                self.assertEqual(process.stderr.read(), b"")
+            self.assertEqual(path.read_bytes(), snapshot)
+            self.assertEqual([entry.name for entry in Vault(path, MASTER).list()], ["External"])
 
     def test_oversized_frame_ends_the_session(self):
         result, replies = self.run_process(b"x" * MAX_REQUEST_BYTES + b"\n" + frame(2, "list"))
