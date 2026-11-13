@@ -1,11 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod vault_dialog;
 mod vault_process;
 mod vault_session;
 
 use std::sync::Arc;
 
-use tauri::{webview::NewWindowResponse, Manager, RunEvent, State, Url, WebviewWindowBuilder};
+use serde::Deserialize;
+use tauri::{
+    webview::NewWindowResponse, Manager, RunEvent, State, Url, WebviewWindow, WebviewWindowBuilder,
+};
+use tokio::sync::Mutex;
 use zeroize::Zeroizing;
 
 use vault_process::Error;
@@ -25,6 +30,62 @@ async fn vault_unlock(
     master: String,
 ) -> Result<Unlocked, Error> {
     vault.unlock(generation, Zeroizing::new(master)).await
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Selection {
+    Default,
+    Existing,
+    New,
+}
+
+#[tauri::command]
+async fn vault_select(
+    vault: Vault<'_>,
+    dialog: State<'_, Mutex<()>>,
+    window: WebviewWindow,
+    generation: Option<u64>,
+    selection: Selection,
+) -> Result<Option<VaultStatus>, Error> {
+    let _guard = dialog.try_lock().map_err(|_| Error::Busy)?;
+    let selection_guard = vault.begin_selection(generation)?;
+    let create = matches!(selection, Selection::New);
+    let path = match selection {
+        Selection::Default => None,
+        _ => match vault_dialog::choose(&window, create).await? {
+            Some(path) => Some(path),
+            None => return Ok(None),
+        },
+    };
+    let selected = selection_guard.commit(path, create)?;
+    vault.selected_status(selected).await.map(Some)
+}
+
+#[tauri::command]
+async fn vault_unlock_key(
+    vault: Vault<'_>,
+    window: WebviewWindow,
+    generation: u64,
+    pin: Option<String>,
+) -> Result<Unlocked, Error> {
+    let pin = pin.map(Zeroizing::new);
+    #[cfg(windows)]
+    let parent = Some(format!(
+        "{:x}",
+        window.hwnd().map_err(|_| Error::KeyFailed)?.0 as usize
+    ));
+    #[cfg(not(windows))]
+    let parent = {
+        drop(window);
+        None
+    };
+    #[cfg(windows)]
+    let pin = {
+        drop(pin);
+        None
+    };
+    vault.unlock_key(generation, pin, parent).await
 }
 
 #[tauri::command]
@@ -60,6 +121,8 @@ fn local_navigation(url: &Url) -> bool {
 
 fn main() {
     tauri::Builder::default()
+        .manage(Mutex::new(()))
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let executable = if cfg!(windows) {
                 "cpass-vault-process.exe"
@@ -87,6 +150,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             vault_status,
             vault_unlock,
+            vault_unlock_key,
+            vault_select,
             vault_list,
             vault_lock,
             vault_active,

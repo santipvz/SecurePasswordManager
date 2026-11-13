@@ -23,6 +23,20 @@ pub(crate) enum Error {
     AlreadyUnlocked,
     InputTooLarge,
     OpenFailed,
+    CreateFailed,
+    WeakMaster,
+    InvalidFile,
+    DialogFailed,
+    KeyDisconnected,
+    KeyFailed,
+    KeyInterrupted,
+    KeySetupRequired,
+    KeyUnsupported,
+    MultipleKeys,
+    PinBlocked,
+    PinInvalid,
+    PinRequired,
+    WrongKey,
     FileError,
     ProcessUnavailable,
     CommunicationFailed,
@@ -31,15 +45,44 @@ pub(crate) enum Error {
 
 pub(crate) enum Operation {
     Status,
-    Open { master: Zeroizing<String> },
+    Open {
+        master: Zeroizing<String>,
+    },
+    Create {
+        master: Zeroizing<String>,
+    },
+    OpenKey {
+        pin: Option<Zeroizing<String>>,
+        window: Option<String>,
+    },
     List,
+}
+
+impl Operation {
+    pub(crate) fn opens_vault(&self) -> bool {
+        matches!(
+            self,
+            Self::Open { .. } | Self::Create { .. } | Self::OpenKey { .. }
+        )
+    }
 }
 
 #[derive(Serialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 enum RequestOperation<'a> {
     Status,
-    Open { master: &'a str },
+    Open {
+        master: &'a str,
+    },
+    Create {
+        master: &'a str,
+    },
+    OpenKey {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pin: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        window: Option<&'a str>,
+    },
     List,
 }
 
@@ -47,6 +90,8 @@ enum RequestOperation<'a> {
 struct Request<'a> {
     version: u8,
     id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<&'a str>,
     #[serde(flatten)]
     operation: RequestOperation<'a>,
 }
@@ -77,8 +122,16 @@ pub(crate) struct Process {
 }
 
 impl Process {
-    pub(crate) fn start(executable: &Path, generation: u64) -> Result<Self, Error> {
+    pub(crate) fn start(
+        executable: &Path,
+        generation: u64,
+        #[cfg(test)] directory: Option<&Path>,
+    ) -> Result<Self, Error> {
         let mut command = Command::new(executable);
+        #[cfg(test)]
+        if let Some(directory) = directory {
+            command.current_dir(directory);
+        }
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -102,8 +155,16 @@ impl Process {
         !matches!(self.child.try_wait(), Ok(None))
     }
 
-    pub(crate) async fn stop(mut self) {
+    pub(crate) async fn stop(mut self, allow_cancellation: bool) {
         drop(self.input);
+        if allow_cancellation
+            && matches!(
+                timeout(Duration::from_millis(750), self.child.wait()).await,
+                Ok(Ok(_))
+            )
+        {
+            return;
+        }
         let _ = self.child.start_kill();
         let _ = timeout(REAP_TIMEOUT, self.child.wait()).await;
     }
@@ -111,24 +172,41 @@ impl Process {
     pub(crate) async fn exchange<T: DeserializeOwned>(
         &mut self,
         operation: Operation,
+        path: Option<&str>,
     ) -> Result<T, Error> {
         let id = self.next_id;
         // JSON numbers must round-trip through the protocol's safe integer range.
         self.next_id = (id % 9_007_199_254_740_991) + 1;
         let mut line = {
-            let (request_operation, capacity) = match &operation {
-                Operation::Status => (RequestOperation::Status, 128),
-                Operation::List => (RequestOperation::List, 128),
-                Operation::Open { master } => {
-                    (RequestOperation::Open { master }, 128 + 6 * master.len())
+            let (request_operation, secret_length) = match &operation {
+                Operation::Status => (RequestOperation::Status, 0),
+                Operation::List => (RequestOperation::List, 0),
+                Operation::Open { master } => (RequestOperation::Open { master }, master.len()),
+                Operation::Create { master } => (RequestOperation::Create { master }, master.len()),
+                Operation::OpenKey { pin, window } => {
+                    let pin = pin.as_ref().map(|value| value.as_str());
+                    (
+                        RequestOperation::OpenKey {
+                            pin,
+                            window: window.as_deref(),
+                        },
+                        pin.map_or(0, str::len),
+                    )
                 }
             };
+            let path = path.filter(|_| !matches!(operation, Operation::List));
+            let length = secret_length + path.map_or(0, str::len);
+            if length >= MAX_REQUEST {
+                return Err(Error::InputTooLarge);
+            }
             let request = Request {
                 version: VERSION,
                 id,
+                path,
                 operation: request_operation,
             };
-            let mut line = Zeroizing::new(Vec::with_capacity(capacity));
+            // JSON escaping expands an input byte to at most six bytes.
+            let mut line = Zeroizing::new(Vec::with_capacity(128 + 6 * length));
             serde_json::to_writer(&mut *line, &request).map_err(|_| Error::CommunicationFailed)?;
             line
         };
@@ -161,6 +239,18 @@ impl Process {
             (Some(result), None) => Ok(result),
             (None, Some(error)) => Err(match error.code.as_str() {
                 "open_failed" => Error::OpenFailed,
+                "create_failed" => Error::CreateFailed,
+                "weak_master" => Error::WeakMaster,
+                "key_disconnected" => Error::KeyDisconnected,
+                "key_failed" => Error::KeyFailed,
+                "key_interrupted" => Error::KeyInterrupted,
+                "key_setup_required" => Error::KeySetupRequired,
+                "key_unsupported" => Error::KeyUnsupported,
+                "multiple_keys" => Error::MultipleKeys,
+                "pin_blocked" => Error::PinBlocked,
+                "pin_invalid" => Error::PinInvalid,
+                "pin_required" => Error::PinRequired,
+                "wrong_key" => Error::WrongKey,
                 "file_error" => Error::FileError,
                 "locked" => Error::Locked,
                 _ => Error::CommunicationFailed,

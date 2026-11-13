@@ -23,6 +23,8 @@
           "permissions": [
             "allow-vault-status",
             "allow-vault-unlock",
+            "allow-vault-unlock-key",
+            "allow-vault-select",
             "allow-vault-list",
             "allow-vault-lock",
             "allow-vault-active",
@@ -34,7 +36,7 @@
   },
   "bundle": {
     "active": false,
-    "icon": ["icons/icon.png"],
+    "icon": ["icons/icon.png", "icons/icon.ico"],
     "resources": { "resources/vault-process": "vault-process/" }
   }
 }

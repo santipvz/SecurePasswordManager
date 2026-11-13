@@ -5,7 +5,7 @@ from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from secrets import token_bytes
-from threading import Event
+from threading import Event, Thread
 
 from .application.ports import KEY_SIZE, PRF_SALT_SIZE, KeyEnrollment
 from .domain.credentials import VaultError
@@ -34,6 +34,14 @@ TIMEOUT_MS = 45_000
 CRED_PROTECT_REQUIRED = 3
 
 
+class SecurityKeyError(VaultError):
+    """A hardware error with a stable code for desktop callers."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
 class _Interaction:
     def __init__(self, read_pin, notify):
         self._read_pin = read_pin
@@ -52,30 +60,55 @@ class _Interaction:
         return True
 
 
-def _client_error(error) -> str:
+def _client_error(error) -> SecurityKeyError:
     if isinstance(error, PinRequiredError):
-        return "Enter the FIDO2 key PIN."
+        return SecurityKeyError("pin_required", "Enter the FIDO2 key PIN.")
     cause = error.cause if isinstance(error, ClientError) else error
     if isinstance(cause, CtapError):
-        pin_required = "Set up a FIDO2 PIN on the key."
+        pin_required = ("key_setup_required", "Set up a FIDO2 PIN on the key.")
         messages = {
-            CtapError.ERR.PIN_INVALID: "The FIDO2 PIN is incorrect.",
-            CtapError.ERR.PIN_AUTH_BLOCKED: "The PIN is temporarily blocked. Reconnect the key.",
-            CtapError.ERR.PIN_BLOCKED: "The PIN is blocked. Use the master password to unlock.",
+            CtapError.ERR.PIN_INVALID: ("pin_invalid", "The FIDO2 PIN is incorrect."),
+            CtapError.ERR.PIN_AUTH_BLOCKED: (
+                "pin_blocked", "The PIN is temporarily blocked. Reconnect the key.",
+            ),
+            CtapError.ERR.PIN_BLOCKED: (
+                "pin_blocked", "The PIN is blocked. Use the master password to unlock.",
+            ),
             CtapError.ERR.PIN_NOT_SET: pin_required,
             CtapError.ERR.PUAT_REQUIRED: pin_required,
         }
         if cause.code in messages:
-            return messages[cause.code]
+            return SecurityKeyError(*messages[cause.code])
+    if isinstance(cause, OSError):
+        return _connection_error(cause)
     if isinstance(error, ClientError):
-        match error.code:
-            case ClientError.ERR.DEVICE_INELIGIBLE:
-                return "The connected key has no credential for this vault."
-            case ClientError.ERR.TIMEOUT:
-                return "The FIDO2 operation timed out or was cancelled."
-            case ClientError.ERR.CONFIGURATION_UNSUPPORTED:
-                return "The key requires a PIN or does not support FIDO2 PRF."
-    return "The FIDO2 operation failed. Check the connection and PIN."
+        messages = {
+            ClientError.ERR.DEVICE_INELIGIBLE: (
+                "wrong_key", "The connected key has no credential for this vault.",
+            ),
+            ClientError.ERR.TIMEOUT: (
+                "key_interrupted", "The FIDO2 operation timed out or was cancelled.",
+            ),
+            ClientError.ERR.CONFIGURATION_UNSUPPORTED: (
+                "key_unsupported", "The key requires a PIN or does not support FIDO2 PRF.",
+            ),
+        }
+        if error.code in messages:
+            return SecurityKeyError(*messages[error.code])
+    return SecurityKeyError(
+        "key_failed", "The FIDO2 operation failed. Check the connection and PIN.",
+    )
+
+
+def _connection_error(error: OSError) -> SecurityKeyError:
+    # Windows WebAuthn reports these HRESULT values through ctypes.
+    match (getattr(error, "winerror", None) or 0) & 0xffffffff:
+        case 0x800704C7 | 0x80090036 | 0x800705B4:
+            return SecurityKeyError("key_interrupted", "The security key request ended.")
+        case 0x80090011:
+            return SecurityKeyError("wrong_key", "Use the security key registered for this vault.")
+        case _:
+            return SecurityKeyError("key_disconnected", "Check the security key connection.")
 
 
 @contextmanager
@@ -83,24 +116,48 @@ def _fido_operation():
     try:
         yield
     except (ClientError, CtapError) as error:
-        raise VaultError(_client_error(error)) from error
+        raise _client_error(error) from error
     except OSError as error:
-        raise VaultError(
-            "The system could not complete the FIDO2 operation. Check the connection."
-        ) from error
+        raise _client_error(error) from error
     except (ValueError, TypeError, IndexError) as error:
-        raise VaultError("Could not verify the FIDO2 key response.") from error
+        raise SecurityKeyError("key_failed", "Could not verify the FIDO2 key response.") from error
 
 
 class _FidoSecurityKey:
-    def __init__(self, client, cancel):
+    def __init__(self, client, cancel, *, native_prompt=False):
         self._client = client
         self._cancel = cancel
+        self._native_prompt = native_prompt
         self._server = Fido2Server(
             PublicKeyCredentialRpEntity(id=RP_ID, name="Secure Password Manager"),
             verify_origin=lambda origin: origin == ORIGIN,
         )
         self._server.timeout = TIMEOUT_MS
+
+    @contextmanager
+    def _ceremony(self):
+        if not self._native_prompt or self._cancel is None:
+            yield self._cancel
+            return
+
+        # WindowsClient sets its event on success. Bridge cancellation to a
+        # fresh event for each WebAuthn call without changing the caller's event.
+        if self._cancel.is_set():
+            raise SecurityKeyError("key_interrupted", "The security key request ended.")
+        native_cancel = Event()
+
+        def relay_cancellation():
+            while not native_cancel.is_set():
+                if self._cancel.wait(0.025):
+                    native_cancel.set()
+
+        relay = Thread(target=relay_cancellation, daemon=True)
+        relay.start()
+        try:
+            yield native_cancel
+        finally:
+            native_cancel.set()
+            relay.join()
 
     def enroll(self) -> KeyEnrollment:
         """Register a non-discoverable credential and prove it can produce a PRF secret."""
@@ -117,7 +174,8 @@ class _FidoSecurityKey:
                     "enforceCredentialProtectionPolicy": True,
                 },
             )
-            response = self._client.make_credential(options.public_key, self._cancel)
+            with self._ceremony() as cancel:
+                response = self._client.make_credential(options.public_key, cancel)
             auth_data = self._server.register_complete(state, response)
             prf = AuthenticatorExtensionsPRFOutputs.from_dict(response.client_extension_results.prf)
             if prf is None or not prf.enabled or auth_data.credential_data is None:
@@ -136,7 +194,8 @@ class _FidoSecurityKey:
                 extensions={"prf": {"eval": {"first": salt}}},
             )
             request = replace(options.public_key, hints=[PublicKeyCredentialHint.SECURITY_KEY])
-            response = self._client.get_assertion(request, self._cancel).get_response(0)
+            with self._ceremony() as cancel:
+                response = self._client.get_assertion(request, cancel).get_response(0)
             self._server.authenticate_complete(state, [stored], response)
             prf = AuthenticatorExtensionsPRFOutputs.from_dict(response.client_extension_results.prf)
             if prf is None or prf.results is None or len(prf.results.first) != KEY_SIZE:
@@ -162,8 +221,7 @@ def open_security_key(
             raise VaultError("Windows could not access the key through WebAuthn.") from error
         if not WindowsClient.is_available():
             raise VaultError("This version of Windows does not provide access to FIDO2 keys.")
-        # Windows owns the native dialog and its Cancel button.
-        yield _FidoSecurityKey(WindowsClient(collector, handle=window), None)
+        yield _FidoSecurityKey(WindowsClient(collector, handle=window), cancel, native_prompt=True)
         return
 
     with ExitStack() as stack:
@@ -173,19 +231,23 @@ def open_security_key(
                 stack.callback(device.close)
                 devices.append(device)
             if not devices:
-                raise VaultError(
-                    "Connect a FIDO2 key over USB and check device permissions."
+                raise SecurityKeyError(
+                    "key_disconnected", "Connect a FIDO2 key and check device permissions.",
                 )
             if len(devices) != 1:
-                raise VaultError("Connect only the FIDO2 key you want to use.")
+                raise SecurityKeyError(
+                    "multiple_keys", "Connect only the FIDO2 key you want to use.",
+                )
             client = Fido2Client(
                 devices[0], collector, _Interaction(read_pin, notify),
                 extensions=[HmacSecretExtension(), CredProtectExtension()],
             )
             if "hmac-secret" not in client.info.extensions:
-                raise VaultError("The connected key does not support FIDO2 hmac-secret.")
+                raise SecurityKeyError(
+                    "key_unsupported", "The connected key does not support FIDO2 hmac-secret.",
+                )
             if client.info.options.get("clientPin") is False and not client.info.options.get("uv"):
-                raise VaultError(
-                    "Set up the key's FIDO2 PIN before using it with the vault."
+                raise SecurityKeyError(
+                    "key_setup_required", "Set up the key's FIDO2 PIN before using it.",
                 )
         yield _FidoSecurityKey(client, cancel)

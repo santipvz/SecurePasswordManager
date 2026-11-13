@@ -5,6 +5,7 @@ import hmac
 import tempfile
 import unittest
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -83,6 +84,42 @@ class VaultSecurityKeyTests(unittest.TestCase):
 
 @unittest.skipUnless(security_key.FIDO2_AVAILABLE, "Requires the optional FIDO2 dependency")
 class WebAuthnSecurityKeyTests(unittest.TestCase):
+    def test_desktop_error_codes_cover_native_and_hid_failures(self):
+        for cause, code in (
+            (OSError("Disconnected"), "key_disconnected"),
+            (security_key.CtapError(security_key.CtapError.ERR.PIN_INVALID), "pin_invalid"),
+            (security_key.ClientError.ERR.DEVICE_INELIGIBLE(), "wrong_key"),
+        ):
+            with self.subTest(code=code):
+                self.assertEqual(security_key._client_error(cause).code, code)
+        for hresult, code in (
+            (0x800704C7, "key_interrupted"),
+            (0x80090011, "wrong_key"),
+            (0x80090035, "key_disconnected"),
+        ):
+            with self.subTest(code=code):
+                cause = OSError("Native WebAuthn error")
+                cause.winerror = hresult - (1 << 32)
+                error = security_key.ClientError.ERR.OTHER_ERROR(cause)
+                self.assertEqual(security_key._client_error(error).code, code)
+
+    def test_native_ceremonies_separate_completion_from_caller_cancellation(self):
+        cancelled = Event()
+        device = security_key._FidoSecurityKey(Mock(), cancelled, native_prompt=True)
+        with device._ceremony() as registration:
+            self.assertFalse(registration.is_set())
+            registration.set()  # WindowsClient signals successful completion.
+        self.assertFalse(cancelled.is_set())
+        with device._ceremony() as proof:
+            self.assertIsNot(proof, registration)
+            self.assertFalse(proof.is_set())
+            cancelled.set()
+            self.assertTrue(proof.wait(1))
+        with self.assertRaises(security_key.SecurityKeyError) as caught:
+            with device._ceremony():
+                self.fail("A cancelled request must not start another ceremony")
+        self.assertEqual(caught.exception.code, "key_interrupted")
+
     def test_signed_assertion_requires_user_verification_and_prf_output(self):
         from cryptography.hazmat.primitives import hashes
         from cryptography.hazmat.primitives.asymmetric import ec

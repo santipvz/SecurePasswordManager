@@ -1,19 +1,41 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core"
-  import { KeyRound, LockKeyhole, Moon, Search, ShieldCheck, Sun } from "@lucide/svelte"
+  import { FolderOpen, KeyRound, LockKeyhole, Moon, Plus, Search, ShieldCheck, Sun } from "@lucide/svelte"
   import { onMount, tick } from "svelte"
 
-  type Status = { exists: boolean; has_security_key: boolean; generation: number }
+  type Status = {
+    exists: boolean
+    has_security_key: boolean
+    generation: number
+    creating: boolean
+    file_name: string | null
+    native_key_prompt: boolean
+  }
   type Unlocked = { generation: number }
   type Entry = { name: string; username: string; url: string }
   type Entries = { entries: Entry[] }
-  type Phase = "loading" | "locked" | "unlocking" | "unlocked" | "locking"
+  type Phase = "loading" | "choosing" | "locked" | "unlocking" | "unlocked" | "locking"
+  type Selection = "default" | "existing" | "new"
 
   const messages: Record<string, string> = {
     busy: "The vault is busy. Try again in a moment.",
-    input_too_large: "The master password exceeds the supported length.",
-    open_failed: "Could not unlock the vault. Check the master password and try again.",
-    file_error: "Could not access the default vault file.",
+    input_too_large: "The unlock request exceeds the supported length.",
+    open_failed: "Could not unlock the vault. Check the master password and vault file.",
+    file_error: "Could not access the vault file.",
+    invalid_file: "Choose a file with the .spm extension.",
+    dialog_failed: "Could not open the file dialog. Try again.",
+    create_failed: "Could not create the vault. Choose a new file in a writable folder.",
+    weak_master: "Use at least 15 characters for the master password.",
+    key_disconnected: "Connect the key and check that the system can access it.",
+    key_failed: "Could not unlock with this key. Check the key and vault, or use the master password.",
+    key_interrupted: "The security key request timed out or was cancelled.",
+    key_setup_required: "Set up a FIDO2 PIN on the key before trying again.",
+    key_unsupported: "The key or system lacks the required FIDO2 features.",
+    multiple_keys: "Connect only the key registered for this vault.",
+    pin_required: "Enter the security key PIN.",
+    pin_invalid: "The security key PIN is incorrect.",
+    pin_blocked: "The security key PIN is blocked. Reconnect the key or use your master password.",
+    wrong_key: "Use the security key registered for this vault.",
     process_unavailable: "Could not start the vault process.",
     timed_out: "The vault process timed out. Try again.",
   }
@@ -25,7 +47,15 @@
   let entries = $state<Entry[]>([])
   let search = $state("")
   let feedback = $state("")
+  let method = $state<"password" | "key">("password")
   let passwordInput = $state<HTMLInputElement>()
+  let confirmationInput = $state<HTMLInputElement>()
+  let pinInput = $state<HTMLInputElement>()
+  let keyButton = $state<HTMLButtonElement>()
+  let openButton = $state<HTMLButtonElement>()
+  let cancelButton = $state<HTMLButtonElement>()
+  const keyReady = $derived(status?.exists && status.has_security_key && !status.creating)
+  const creating = $derived(status?.creating && !status.exists)
   let searchInput = $state<HTMLInputElement>()
   let revision = 0
   let lastActivity = -Infinity
@@ -42,21 +72,58 @@
       : "The vault session ended. Unlock the vault to try again."
   }
 
-  async function refresh() {
-    const current = ++revision
+  async function focusWelcome(current: number) {
+    await tick()
+    if (revision !== current) return
+    const input = pinInput ?? keyButton ?? passwordInput ?? openButton
+    input?.focus()
+  }
+
+  function clearInputs() {
+    if (passwordInput) passwordInput.value = ""
+    if (confirmationInput) confirmationInput.value = ""
+    if (pinInput) pinInput.value = ""
+  }
+
+  async function refresh(message = "", current = ++revision) {
     phase = "loading"
-    status = undefined
-    feedback = ""
+    feedback = message
     try {
       const result = await invoke<Status>("vault_status")
-      if (revision === current) status = result
+      if (revision === current) {
+        status = result
+        if (!result.has_security_key || result.creating) method = "password"
+      }
     } catch (error) {
-      if (revision === current) feedback = errorMessage(error)
+      if (revision === current) {
+        status = undefined
+        feedback = message || errorMessage(error)
+      }
     } finally {
       if (revision === current) phase = "locked"
     }
-    await tick()
-    if (revision === current) passwordInput?.focus()
+    await focusWelcome(current)
+  }
+
+  async function choose(selection: Selection) {
+    if (phase !== "locked") return
+    const current = ++revision
+    clearInputs()
+    feedback = ""
+    phase = "choosing"
+    try {
+      // The native picker keeps the full path in Rust.
+      const result = await invoke<Status | null>("vault_select", { generation: status?.generation, selection })
+      if (revision !== current) return
+      if (result) {
+        status = result
+        method = "password"
+      }
+      phase = "locked"
+      await focusWelcome(current)
+    } catch (error) {
+      if (revision === current) await refresh(errorMessage(error), current)
+    }
   }
 
   async function endSession(message: string) {
@@ -64,37 +131,59 @@
     generation = undefined
     entries = []
     search = ""
-    if (passwordInput) passwordInput.value = ""
+    clearInputs()
     phase = "locking"
     feedback = message
     try {
-      const next = await invoke<number>("vault_lock")
-      if (revision === current && status) status.generation = next
+      await invoke("vault_lock")
     } catch {
       if (revision === current) feedback = "Could not confirm the lock. Close and reopen the app."
       return
     }
-    if (revision !== current) return
-    phase = "locked"
-    await tick()
-    if (revision === current) passwordInput?.focus()
+    if (revision === current) await refresh(message, current)
   }
 
-  async function unlock(event: SubmitEvent) {
+  async function switchMethod(next: "password" | "key") {
+    clearInputs()
+    method = next
+    feedback = ""
+    await focusWelcome(revision)
+  }
+
+  async function submit(event: SubmitEvent) {
     event.preventDefault()
-    if (phase !== "locked" || !status || !passwordInput?.value) return
+    if (phase !== "locked" || !status) return
+    if (method === "password") {
+      if (!passwordInput?.value) return
+      if (creating && (Array.from(passwordInput.value).length < 15 || !passwordInput.value.trim())) {
+        clearInputs()
+        feedback = messages.weak_master
+        passwordInput.focus()
+        return
+      }
+      if (creating && passwordInput.value !== confirmationInput?.value) {
+        if (confirmationInput) confirmationInput.value = ""
+        feedback = "The master passwords do not match."
+        confirmationInput?.focus()
+        return
+      }
+    }
     const current = ++revision
     feedback = ""
     phase = "unlocking"
     try {
-      // Pass the value directly to IPC. Clear the input before awaiting the reply.
-      const input = passwordInput
+      const args = { generation: status.generation }
       let pending: Promise<Unlocked>
       try {
-        pending = invoke<Unlocked>("vault_unlock", { generation: status.generation, master: input.value })
+        pending = method === "key"
+          ? invoke<Unlocked>("vault_unlock_key", { ...args, pin: pinInput?.value || undefined })
+          : invoke<Unlocked>("vault_unlock", { ...args, master: passwordInput?.value })
       } finally {
-        input.value = ""
+        clearInputs()
       }
+      void tick().then(() => {
+        if (revision === current) cancelButton?.focus()
+      })
       const session = await pending
       if (revision !== current) return
       const metadata = await invoke<Entries>("vault_list", { generation: session.generation })
@@ -115,6 +204,10 @@
   }
 
   function activity(event: KeyboardEvent | PointerEvent) {
+    if (event.isTrusted && event instanceof KeyboardEvent && event.key === "Escape" && phase === "unlocking") {
+      if (!creating) void endSession("")
+      return
+    }
     if (!event.isTrusted || generation === undefined || performance.now() - lastActivity < 250) return
     lastActivity = performance.now()
     void invoke("vault_activity", { generation }).catch(() => {})
@@ -182,37 +275,75 @@
     <main class="welcome">
       <section class="unlock-card" aria-labelledby="vault-title">
         <div class="vault-icon"><LockKeyhole size={28} strokeWidth={1.7} /></div>
-        <h1 id="vault-title">Unlock your vault</h1>
+        <h1 id="vault-title">
+          {creating ? "Create a vault" : method === "key" && keyReady ? "Unlock with YubiKey" : "Unlock your vault"}
+        </h1>
         <p class="muted welcome-copy">
-          {#if status?.exists && status.has_security_key}
-            A security key is registered for this vault. Use your master password to unlock it here.
+          {#if creating}
+            Choose a master password for <strong>{status?.file_name}</strong>. Keep it somewhere safe.
+          {:else if status?.creating && status.exists}
+            <strong>{status.file_name}</strong> already exists. Open it or choose a new filename.
+          {:else if keyReady && method === "key"}
+            {#if status?.native_key_prompt}
+              Connect your YubiKey and follow the Windows security prompt.
+            {:else}
+              Connect your YubiKey and touch it when it blinks. Leave the PIN blank if your key verifies by fingerprint.
+            {/if}
           {:else if status?.exists}
-            Enter the master password for your local vault.
-          {:else if status}
-            Use the Python app to create a vault in the default location, then check again.
+            Enter the master password for <strong>{status.file_name ?? "your default vault"}</strong>.
           {:else}
-            Secure Password Manager will check for a vault in the default location.
+            Create a vault or open an existing .spm file.
           {/if}
         </p>
         {#if feedback}<p class="error-note" role="alert">{feedback}</p>{/if}
-        {#if phase === "loading"}
-          <div class="unlock-state" role="status"><span class="spinner"></span> Checking for a vault…</div>
-        {:else if phase === "locking"}
-          {#if !feedback}<p role="status">Locking vault…</p>{/if}
-        {:else if status?.exists}
-          <form onsubmit={unlock} autocomplete="off">
-            <label class="password-label" for="master-password">Master password</label>
-            <input class="password-input full" id="master-password" type="password" bind:this={passwordInput}
-              autocomplete="off" autocapitalize="off" spellcheck={false} required disabled={phase === "unlocking"} />
-            {#if phase === "unlocking"}
-              <div class="unlock-state" role="status"><span class="spinner"></span> Unlocking vault…</div>
-              <button class="secondary full" type="button" onclick={() => endSession("")}>Cancel</button>
-            {:else}
-              <button class="primary full" type="submit"><KeyRound size={17} /> Unlock vault</button>
-            {/if}
-          </form>
+        {#if phase === "loading" || phase === "choosing" || phase === "locking"}
+          <div class="unlock-state" role="status">
+            <span class="spinner"></span>
+            {phase === "loading" ? "Checking for a vault…" : phase === "choosing" ? "Waiting for file selection…" : "Locking vault…"}
+          </div>
+        {:else if phase === "unlocking"}
+          <div class="unlock-state" role="status">
+            <span class="spinner"></span>
+            {creating ? "Creating vault…" : method === "key" ? "Waiting for your security key…" : "Unlocking vault…"}
+          </div>
+          {#if !creating}
+            <button class="secondary full" type="button" bind:this={cancelButton} onclick={() => endSession("")}>Cancel</button>
+          {/if}
         {:else}
-          <button class="secondary full" onclick={refresh}>Check again</button>
+          {#if creating || (status?.exists && !status.creating)}
+            <form onsubmit={submit} autocomplete="off">
+              {#if method === "key" && keyReady}
+                {#if !status?.native_key_prompt}
+                  <label class="password-label" for="key-pin">Security key PIN</label>
+                  <input class="password-input full" id="key-pin" type="password" bind:this={pinInput}
+                    autocomplete="off" autocapitalize="off" spellcheck={false} />
+                {/if}
+                <button class="primary full" type="submit" bind:this={keyButton}><KeyRound size={17} /> Use YubiKey</button>
+              {:else}
+                <label class="password-label" for="master-password">Master password</label>
+                <input class="password-input full" id="master-password" type="password" bind:this={passwordInput}
+                  autocomplete="off" autocapitalize="off" spellcheck={false} required />
+                {#if creating}
+                  <label class="password-label" for="confirm-master">Confirm master password</label>
+                  <input class="password-input full" id="confirm-master" type="password" bind:this={confirmationInput}
+                    autocomplete="off" autocapitalize="off" spellcheck={false} required />
+                {/if}
+                <button class="primary full" type="submit"><KeyRound size={17} /> {creating ? "Create vault" : "Unlock vault"}</button>
+              {/if}
+            </form>
+            {#if keyReady}
+              <button class="secondary full" onclick={() => switchMethod(method === "key" ? "password" : "key")}>
+                {method === "key" ? "Use master password" : "Unlock with YubiKey"}
+              </button>
+            {/if}
+          {/if}
+          <div class="welcome-footer">
+            <button class="text-button" onclick={() => choose("new")}><Plus size={16} /> {creating ? "Choose new file" : "Create vault"}</button>
+            <button class="text-button" bind:this={openButton} onclick={() => choose("existing")}><FolderOpen size={16} /> Open file</button>
+          </div>
+          {#if status?.file_name || !status}
+            <button class="text-button full" onclick={() => choose("default")}>Check default location</button>
+          {/if}
         {/if}
       </section>
     </main>

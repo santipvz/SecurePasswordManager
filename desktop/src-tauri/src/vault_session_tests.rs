@@ -1,4 +1,4 @@
-use std::{fs, os::unix::fs::PermissionsExt, path::Path, sync::Arc};
+use std::{fs, path::Path, sync::Arc};
 
 use tempfile::TempDir;
 use tokio::{task::JoinHandle, time::sleep};
@@ -6,22 +6,19 @@ use tokio::{task::JoinHandle, time::sleep};
 use super::*;
 
 const MASTER: &str = "Synthetic compatibility passphrase";
-
-fn executable(path: &Path, script: &str) {
-    fs::write(path, script).unwrap();
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+fn launcher() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fake_vault_process.py")
 }
 
 fn fake_core(body: &str) -> (TempDir, Arc<VaultSession>) {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("core");
-    executable(
-        &path,
-        &format!(
+    fs::write(
+        dir.path().join("core.py"),
+        format!(
             r#"#!/usr/bin/env python3
 import json, os, sys, time
 from pathlib import Path
-root = Path(__file__).parent
+root = Path.cwd()
 
 def reply(result, **fields):
     response = dict(version=1, id=request["id"], result=result)
@@ -37,8 +34,9 @@ for line in sys.stdin:
 {body}
 "#
         ),
-    );
-    let session = Arc::new(VaultSession::new(path));
+    )
+    .unwrap();
+    let session = Arc::new(VaultSession::with_test_directory(launcher(), dir.path()));
     (dir, session)
 }
 
@@ -67,21 +65,13 @@ async fn opens_both_existing_formats_without_modifying_them() {
     let core = manifest.join("resources/vault-process/cpass-vault-process");
     for (fixture, has_security_key) in [("password-v1.spm", false), ("fido2-v2.spm", true)] {
         let dir = tempfile::tempdir().unwrap();
-        let data = dir.path().join("SecurePasswordManager");
-        fs::create_dir(&data).unwrap();
         let original = fs::read(manifest.join("../../tests/fixtures").join(fixture)).unwrap();
-        let vault = data.join("vault.spm");
+        let vault = dir.path().join(fixture);
         fs::write(&vault, &original).unwrap();
-        let launcher = dir.path().join("core");
-        executable(
-            &launcher,
-            &format!(
-                "#!/bin/sh\nexport XDG_DATA_HOME=\"$(dirname \"$0\")\"\nexec \"{}\"\n",
-                core.display()
-            ),
-        );
-        let session = VaultSession::new(launcher);
-        let status = session.status().await.unwrap();
+        let session = VaultSession::new(core.clone());
+        let selection = session.begin_selection(None).unwrap();
+        let generation = selection.commit(Some(vault.clone()), false).unwrap();
+        let status = session.selected_status(generation).await.unwrap();
         assert!(status.exists);
         assert_eq!(status.has_security_key, has_security_key);
         assert_eq!(
@@ -289,4 +279,73 @@ async fn timeout_and_dropped_request_discard_the_process() {
     assert!(pending.await.unwrap_err().is_cancelled());
     assert!(session.process.lock().await.is_none());
     session.close();
+}
+
+#[tokio::test]
+async fn selecting_another_vault_rejects_the_previous_generation() {
+    let (dir, session) = fake_core(
+        r#"    if operation == "open":
+        assert request["path"] == str(root / "selected.spm")
+        reply(dict(unlocked=True, has_security_key=False))
+"#,
+    );
+    let old = session.status().await.unwrap().generation;
+    let selected = dir.path().join("selected.spm");
+    let selection = session.begin_selection(Some(old)).unwrap();
+    assert_eq!(
+        session.unlock(old, MASTER.to_owned().into()).await.err(),
+        Some(Error::Busy)
+    );
+    let next = selection.commit(Some(selected), false).unwrap();
+    assert_eq!(
+        session.begin_selection(Some(old)).err(),
+        Some(Error::Locked)
+    );
+    assert_eq!(
+        session.unlock(old, MASTER.to_owned().into()).await.err(),
+        Some(Error::Locked)
+    );
+    let status = session.selected_status(next).await.unwrap();
+    assert_eq!(status.file_name.as_deref(), Some("selected.spm"));
+    assert!(!status.creating);
+    let unlocked = session
+        .unlock(next, MASTER.to_owned().into())
+        .await
+        .unwrap();
+    assert!(session.active(unlocked.generation));
+    assert_eq!(
+        session.begin_selection(Some(next)).err(),
+        Some(Error::Locked)
+    );
+    session.lock().await;
+}
+
+#[tokio::test]
+async fn cancelling_a_key_request_closes_stdin_and_discards_its_reply() {
+    let (dir, session) = fake_core(
+        r#"    if operation == "open_key":
+        assert request["pin"] == "synthetic PIN"
+        assert "master" not in request
+        (root / "started").touch()
+        assert sys.stdin.read() == ""
+        (root / "cancelled").touch()
+        reply(dict(unlocked=True, has_security_key=True))
+"#,
+    );
+    let generation = session.status().await.unwrap().generation;
+    let task = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move {
+            session
+                .unlock_key(generation, Some("synthetic PIN".to_owned().into()), None)
+                .await
+        }
+    });
+    wait_for_file(&dir.path().join("started")).await;
+    let next = session.lock().await;
+    assert_eq!(task.await.unwrap().err(), Some(Error::Locked));
+    assert_ne!(next, generation);
+    assert!(!session.active(generation));
+    assert!(dir.path().join("cancelled").is_file());
+    assert!(session.process.lock().await.is_none());
 }
