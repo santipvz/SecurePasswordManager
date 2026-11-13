@@ -12,6 +12,7 @@
   "dependencies": {
     "@fontsource/inter": "5.3.0",
     "@lucide/svelte": "1.72.0",
+    "@tauri-apps/api": "2.12.4",
     "svelte": "5.57.3"
   },
   "devDependencies": {

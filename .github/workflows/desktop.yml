@@ -1,21 +1,18 @@
-name: Desktop prototype
+name: Desktop
 
 on:
   push:
     branches: [develop]
-    paths: [desktop/**, .github/workflows/desktop.yml]
+    paths: [desktop/**, src/**, tests/fixtures/**, pyproject.toml, .github/workflows/desktop.yml]
   pull_request:
-    paths: [desktop/**, .github/workflows/desktop.yml]
+    paths: [desktop/**, src/**, tests/fixtures/**, pyproject.toml, .github/workflows/desktop.yml]
 
 permissions:
   contents: read
 
 jobs:
-  prototype:
+  desktop:
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: desktop
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,9 +20,17 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: desktop/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - run: npm ci
+        working-directory: desktop
       - run: npm run check
+        working-directory: desktop
       - run: npm run build
+        working-directory: desktop
       - name: Install Tauri build prerequisites
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-      - run: cargo check --locked --features custom-protocol --manifest-path src-tauri/Cargo.toml
+      - run: python -m pip install ".[yubikey]" pyinstaller==6.22.3
+      - run: python desktop/scripts/bundle_vault.py
+      - run: cargo test --locked --features custom-protocol --manifest-path desktop/src-tauri/Cargo.toml
