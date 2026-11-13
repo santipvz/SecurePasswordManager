@@ -82,19 +82,19 @@ def _client_error(error) -> SecurityKeyError:
     if isinstance(cause, OSError):
         return _connection_error(cause)
     if isinstance(error, ClientError):
-        match error.code:
-            case ClientError.ERR.DEVICE_INELIGIBLE:
-                return SecurityKeyError(
-                    "wrong_key", "The connected key has no credential for this vault.",
-                )
-            case ClientError.ERR.TIMEOUT:
-                return SecurityKeyError(
-                    "key_interrupted", "The FIDO2 operation timed out or was cancelled.",
-                )
-            case ClientError.ERR.CONFIGURATION_UNSUPPORTED:
-                return SecurityKeyError(
-                    "key_unsupported", "The key requires a PIN or does not support FIDO2 PRF.",
-                )
+        messages = {
+            ClientError.ERR.DEVICE_INELIGIBLE: (
+                "wrong_key", "The connected key has no credential for this vault.",
+            ),
+            ClientError.ERR.TIMEOUT: (
+                "key_interrupted", "The FIDO2 operation timed out or was cancelled.",
+            ),
+            ClientError.ERR.CONFIGURATION_UNSUPPORTED: (
+                "key_unsupported", "The key requires a PIN or does not support FIDO2 PRF.",
+            ),
+        }
+        if error.code in messages:
+            return SecurityKeyError(*messages[error.code])
     return SecurityKeyError(
         "key_failed", "The FIDO2 operation failed. Check the connection and PIN.",
     )
