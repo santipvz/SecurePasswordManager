@@ -137,8 +137,8 @@ class DesktopApp:  # pylint: disable=too-many-instance-attributes
         self._clear_clipboard()
         self.vault = None
         self.names = []
-        self.query = self.status = self.password_display = None
         self._show_unlock()
+        self.query = self.status = self.password_display = None
 
     def _show_unlock(self):
         view = self._new_view(centered=True)
