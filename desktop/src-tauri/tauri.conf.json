@@ -28,6 +28,8 @@
             "allow-vault-list",
             "allow-vault-generate",
             "allow-vault-review",
+            "allow-vault-manage-files",
+            "allow-vault-manage-unlock",
             "allow-vault-entry-notes",
             "allow-vault-reveal",
             "allow-vault-copy",

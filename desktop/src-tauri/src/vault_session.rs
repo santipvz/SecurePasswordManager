@@ -19,6 +19,7 @@ use crate::{
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const KEY_TIMEOUT: Duration = Duration::from_secs(50);
+const REGISTRATION_TIMEOUT: Duration = Duration::from_secs(100);
 
 #[derive(Clone, Default)]
 enum Selection {
@@ -137,6 +138,18 @@ struct Notes {
 #[serde(deny_unknown_fields)]
 struct Password {
     password: Secret,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Backup {
+    saved: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct UnlockMethods {
+    has_security_key: bool,
 }
 
 #[derive(Deserialize)]
@@ -423,6 +436,76 @@ impl VaultSession {
             .await
     }
 
+    pub(crate) async fn backup(&self, generation: u64, destination: PathBuf) -> Result<(), Error> {
+        let destination = destination
+            .into_os_string()
+            .into_string()
+            .map_err(|_| Error::InvalidFile)?;
+        self.request(
+            Operation::Backup { destination },
+            Some(generation),
+            |reply: Backup, _| reply.saved.then_some(()).ok_or(Error::CommunicationFailed),
+        )
+        .await
+    }
+
+    pub(crate) async fn import_legacy(
+        &self,
+        generation: u64,
+        paths: Vec<PathBuf>,
+    ) -> Result<Entries, Error> {
+        let paths = paths
+            .into_iter()
+            .map(|path| path.into_os_string().into_string())
+            .collect::<Result<_, _>>()
+            .map_err(|_| Error::InvalidImport)?;
+        self.request(
+            Operation::ImportLegacy { paths },
+            Some(generation),
+            |entries, _| Ok(entries),
+        )
+        .await
+    }
+
+    pub(crate) async fn update_unlock_methods(
+        &self,
+        generation: u64,
+        operation: Operation,
+    ) -> Result<UnlockMethods, Error> {
+        let force_lock = matches!(operation, Operation::ChangeMaster { .. });
+        let result = self
+            .request(operation, Some(generation), |methods, state| {
+                if force_lock {
+                    state.generation += 1;
+                    state.deadline = None;
+                }
+                Ok(methods)
+            })
+            .await;
+        if force_lock && result.is_ok() {
+            tokio::join!(self.stop_stale(), self.clean_clipboard());
+        }
+        result
+    }
+
+    pub(crate) async fn select_backup(&self, generation: u64, path: PathBuf) -> Result<(), Error> {
+        self.expire();
+        let changed = self.state.send_if_modified(|state| {
+            if state.closed || state.generation != generation || state.deadline.is_none() {
+                return false;
+            }
+            state.generation += 1;
+            state.deadline = None;
+            state.selection = Selection::Existing(path);
+            true
+        });
+        if !changed {
+            return Err(Error::Locked);
+        }
+        tokio::join!(self.stop_stale(), self.clean_clipboard());
+        Ok(())
+    }
+
     pub(crate) async fn generate(
         &self,
         generation: Option<u64>,
@@ -566,10 +649,10 @@ impl VaultSession {
         let key_request = matches!(operation, Operation::OpenKey { .. });
         let allow_cleanup = key_request || operation.writes_vault();
         let credential_request = operation.requires_session();
-        let request_timeout = if key_request {
-            KEY_TIMEOUT
-        } else {
-            self.request_timeout
+        let request_timeout = match operation {
+            Operation::OpenKey { .. } => KEY_TIMEOUT,
+            Operation::RegisterKey { .. } => REGISTRATION_TIMEOUT,
+            _ => self.request_timeout,
         };
         let response = tokio::select! {
             biased;
@@ -611,6 +694,22 @@ fn keep_process(error: Error, credential_request: bool) -> bool {
                     | Error::EntryDuplicate
                     | Error::EntryInvalid
                     | Error::WriteConflict
+                    | Error::BackupFailed
+                    | Error::ImportFailed
+                    | Error::IncorrectMaster
+                    | Error::AlreadyRegistered
+                    | Error::NoRegisteredKey
+                    | Error::WeakMaster
+                    | Error::KeyDisconnected
+                    | Error::KeyFailed
+                    | Error::KeyInterrupted
+                    | Error::KeySetupRequired
+                    | Error::KeyUnsupported
+                    | Error::MultipleKeys
+                    | Error::PinBlocked
+                    | Error::PinInvalid
+                    | Error::PinRequired
+                    | Error::WrongKey
             )
 }
 

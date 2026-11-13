@@ -17,8 +17,15 @@ Requests are UTF-8 JSON objects on separate lines. The maximum request size is 6
 | `entry_password` | Credential `name` | Only the requested credential's `password`. Rust consumes the value locally for clipboard requests. |
 | `save_entry` | `name`, optional `username`, `url` and `notes`, optional `previous` name and `password` | Metadata of the saved credential. Omit `previous` to create. On edits, omit `password` to preserve it. |
 | `delete_entry` | Credential `name` | `deleted: true` after saving the deletion. |
+| `backup` | Absolute `destination` ending in `.spm` | `saved: true` after saving an encrypted snapshot to a new file. |
+| `import_legacy` | `paths` array of 1 to 64 absolute `.key` paths | Metadata for the imported entries after one conflict-checked write. |
+| `change_master` | Current `master` and `new_master` | `has_security_key: false` after rotating the active vault key. |
+| `register_key` | Current `master`, optional `pin`, and optional Windows `window` handle | `has_security_key: true` after registration and verification. |
+| `remove_key` | Current `master` | `has_security_key: false` after removing the active registration. |
 | `lock` | None | `unlocked: false`. Drops the current session. |
 
 Omit the path to use the platform's default vault path. Opening a vault discards the previous session before attempting authentication. EOF signals cancellation of any pending FIDO2 operation, ends the process, and releases the session. The caller discards replies from cancelled sessions and terminates the process if it fails to exit within the cancellation grace period. Only one request is processed at a time. Keep request and response bodies out of logs.
 
 Credential commands require an unlocked session. Writes use the same conflict-checked encrypted storage as the CLI. List and write replies contain no passwords or notes.
+
+Settings operations require an unlocked session. Older backups retain the unlock methods they had when saved. Opening a backup uses the regular open flow with the selected backup path.

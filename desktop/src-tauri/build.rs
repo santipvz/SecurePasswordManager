@@ -7,6 +7,8 @@ fn main() {
         "vault_list",
         "vault_generate",
         "vault_review",
+        "vault_manage_files",
+        "vault_manage_unlock",
         "vault_entry_notes",
         "vault_reveal",
         "vault_copy",

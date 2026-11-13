@@ -13,9 +13,10 @@ from threading import Event, Thread
 from time import monotonic, sleep
 from unittest.mock import Mock, patch
 
+from spm import console_interface
 from spm.sec_pass_manager import MAX_LENGTH, MIN_LENGTH, SYMBOLS
 from spm.security_key import SecurityKeyError
-from spm.vault import Entry, Vault
+from spm.vault import Entry, KeyEnrollment, Vault, VaultError
 from spm.vault_protocol import MAX_REQUEST_BYTES, serve
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -318,6 +319,152 @@ class VaultProtocolTests(unittest.TestCase):
                 self.assertNotIn(b"test-only", result.stdout)
                 self.assertNotIn(b"a unique synthetic test password", result.stdout)
                 self.assertEqual(path.read_bytes(), snapshot)
+
+    def test_settings_backup_and_atomic_legacy_import(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "active.spm"
+            backup = root / "backup.spm"
+            existing = root / "existing.spm"
+            good = root / "Mail.key"
+            bad = root / "Broken.key"
+            good.write_text("User: synthetic-user\nPassword: synthetic-password\n", encoding="utf-8")
+            bad.write_text("invalid", encoding="utf-8")
+            existing.write_bytes(b"preserve this file")
+            Vault.create(path, MASTER)
+            snapshot = path.read_bytes()
+            result, replies = self.run_process(b"".join([
+                frame(1, "backup", destination=str(backup)),
+                frame(2, "open", path=str(path), master=MASTER),
+                frame(3, "backup", destination=str(existing)),
+                frame(4, "import_legacy", paths=[str(good), str(bad)]),
+                frame(5, "list"),
+                frame(6, "backup", destination=str(backup)),
+                frame(7, "import_legacy", paths=[str(good)]),
+                frame(8, "import_legacy", paths=[str(good)]),
+                frame(9, "open", path=str(backup), master=MASTER),
+                frame(10, "list"),
+            ]))
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(replies[0]["error"]["code"], "locked")
+            self.assertEqual(replies[2]["error"]["code"], "backup_failed")
+            self.assertEqual(replies[3]["error"]["code"], "import_failed")
+            self.assertEqual(replies[4]["result"]["entries"], [])
+            self.assertTrue(replies[5]["result"]["saved"])
+            self.assertEqual(replies[6]["result"]["entries"], [
+                {"name": "Mail", "username": "synthetic-user", "url": ""},
+            ])
+            self.assertEqual(replies[7]["error"]["code"], "entry_duplicate")
+            self.assertTrue(replies[8]["result"]["unlocked"])
+            self.assertEqual(replies[9]["result"]["entries"], [])
+            self.assertEqual(backup.read_bytes(), snapshot)
+            self.assertEqual(existing.read_bytes(), b"preserve this file")
+            self.assertEqual(Vault(path, MASTER).get("Mail").password, "synthetic-password")
+            self.assertIn("synthetic-password", good.read_text(encoding="utf-8"))
+            self.assertNotIn(b"synthetic-password", result.stdout)
+
+    def test_lost_key_recovery_and_master_rotation_preserve_older_backup_methods(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "active.spm"
+            path.write_bytes((FIXTURES / "fido2-v2.spm").read_bytes())
+            backup = root / "old.spm"
+            new_master = "Synthetic replacement master passphrase"
+            _, replies = self.run_process(b"".join([
+                frame(1, "open", path=str(path), master=MASTER),
+                frame(2, "backup", destination=str(backup)),
+                frame(3, "remove_key", master="wrong current password"),
+                frame(4, "remove_key", master=MASTER),
+                frame(5, "change_master", master=MASTER, new_master="short"),
+                frame(6, "change_master", master=MASTER, new_master=new_master),
+                frame(7, "open", path=str(path), master=MASTER),
+                frame(8, "open", path=str(path), master=new_master),
+            ]))
+            self.assertEqual(replies[2]["error"]["code"], "incorrect_master")
+            self.assertFalse(replies[3]["result"]["has_security_key"])
+            self.assertEqual(replies[4]["error"]["code"], "weak_master")
+            self.assertFalse(replies[5]["result"]["has_security_key"])
+            self.assertEqual(replies[6]["error"]["code"], "open_failed")
+            self.assertTrue(replies[7]["result"]["unlocked"])
+            device = Mock()
+            device.derive.return_value = b"T" * 32
+            self.assertTrue(Vault(backup, security_key=device).has_security_key)
+            self.assertTrue(Vault(backup, MASTER).has_security_key)
+            with self.assertRaises(VaultError):
+                Vault(path, security_key=device)
+            self.assertEqual(Vault(path, new_master).list(), Vault(backup, MASTER).list())
+
+    def test_backup_rejects_a_stale_snapshot_after_cli_write(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "vault.spm"
+            backup = root / "backup.spm"
+            Vault.create(path, MASTER)
+            with subprocess.Popen(
+                [sys.executable, "-m", "spm.vault_protocol"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            ) as process:
+                process.stdin.write(frame(1, "open", path=str(path), master=MASTER))
+                process.stdin.flush()
+                self.assertTrue(json.loads(process.stdout.readline())["result"]["unlocked"])
+                with patch("spm.console_interface.getpass.getpass", return_value=MASTER):
+                    with patch("sys.stdout", new=io.StringIO()):
+                        self.assertEqual(console_interface.main(
+                            ["--vault", str(path), "add", "External", "--generate"],
+                        ), 0)
+                process.stdin.write(frame(2, "backup", destination=str(backup)))
+                process.stdin.close()
+                self.assertEqual(json.loads(process.stdout.readline())["error"]["code"], "write_conflict")
+                self.assertEqual(process.wait(timeout=5), 0)
+            self.assertFalse(backup.exists())
+
+    def test_register_key_requires_current_master_and_cancels_before_commit(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "active.spm"
+            Vault.create(path, MASTER)
+            device = Mock()
+            device.enroll.return_value = KeyEnrollment(b"synthetic", b"s" * 32, b"p" * 32)
+            with patch("spm.vault_protocol.open_security_key") as authenticator:
+                authenticator.return_value.__enter__.return_value = device
+                open_request = frame(1, "open", path=str(path), master=MASTER)
+                def exchange(master, started=None):
+                    read, write = os.pipe()
+                    output = io.BytesIO()
+                    with os.fdopen(read, "rb") as source, os.fdopen(write, "wb") as client:
+                        worker = Thread(target=serve, args=(source, output), daemon=True)
+                        worker.start()
+                        client.write(open_request + frame(2, "register_key", master=master))
+                        client.flush()
+                        if started:
+                            self.assertTrue(started.wait(5))
+                        else:
+                            deadline = monotonic() + 5
+                            while output.getvalue().count(b"\n") < 2 and monotonic() < deadline:
+                                sleep(0.01)
+                            self.assertEqual(output.getvalue().count(b"\n"), 2)
+                        client.close()
+                        worker.join(5)
+                        self.assertFalse(worker.is_alive())
+                    return json.loads(output.getvalue().splitlines()[1])
+
+                self.assertEqual(exchange("incorrect")["error"]["code"], "incorrect_master")
+                authenticator.assert_not_called()
+                original = path.read_bytes()
+                started = Event()
+
+                def finish_after_disconnect():
+                    started.set()
+                    cancel = authenticator.call_args.kwargs["cancel"]
+                    self.assertTrue(cancel.wait(5))
+                    return device.enroll.return_value
+
+                device.enroll.side_effect = finish_after_disconnect
+                self.assertEqual(exchange(MASTER, started)["error"]["code"], "key_interrupted")
+                self.assertEqual(path.read_bytes(), original)
+                device.enroll.side_effect = None
+                self.assertTrue(exchange(MASTER)["result"]["has_security_key"])
+                device.derive.return_value = b"p" * 32
+                self.assertTrue(Vault(path, security_key=device).has_security_key)
 
     def test_oversized_frame_ends_the_session(self):
         result, replies = self.run_process(b"x" * MAX_REQUEST_BYTES + b"\n" + frame(2, "list"))

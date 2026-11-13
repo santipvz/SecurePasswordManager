@@ -15,7 +15,7 @@ from .sec_pass_manager import MAX_LENGTH, MIN_LENGTH, generate_password
 from .security_key import SecurityKeyError, open_security_key
 from .vault import (
     MIN_MASTER_LENGTH, Entry, Vault, VaultConflict, VaultError, default_vault_path,
-    vault_has_security_key,
+    read_legacy, vault_has_security_key,
 )
 
 VERSION = 1
@@ -33,6 +33,11 @@ OPERATIONS = {
     "entry_password": {"name"},
     "save_entry": {"previous", "name", "password", "username", "url", "notes"},
     "delete_entry": {"name"},
+    "backup": {"destination"},
+    "import_legacy": {"paths"},
+    "change_master": {"master", "new_master"},
+    "register_key": {"master", "pin", "window"},
+    "remove_key": {"master"},
     "lock": set(),
 }
 REQUIRED_FIELDS = {"version", "id", "operation"}
@@ -44,7 +49,14 @@ OPERATION_REQUIRED_FIELDS = {
     "entry_password": {"name"},
     "save_entry": {"name"},
     "delete_entry": {"name"},
+    "backup": {"destination"},
+    "import_legacy": {"paths"},
+    "change_master": {"master", "new_master"},
+    "register_key": {"master"},
+    "remove_key": {"master"},
 }
+SETTINGS_OPERATIONS = {"backup", "import_legacy", "change_master", "register_key", "remove_key"}
+MAX_IMPORT_FILES = 64
 ERROR_MESSAGES = {
     "invalid_request": "Invalid request.",
     "request_too_large": "Request exceeds 64 KiB.",
@@ -70,6 +82,11 @@ ERROR_MESSAGES = {
     "entry_duplicate": "A credential with that name already exists.",
     "entry_invalid": "Enter a name and password for the credential.",
     "write_conflict": "The vault changed on disk. Lock and reopen it before making changes.",
+    "backup_failed": "Could not save the backup. Choose a new file in a writable folder.",
+    "import_failed": "Could not import the selected files. Check their format and names.",
+    "incorrect_master": "The current master password is incorrect.",
+    "already_registered": "A security key is already registered.",
+    "no_registered_key": "There is no security key registered.",
     "write_failed": "Could not confirm the vault was saved. Check the file and reopen the vault.",
 }
 
@@ -110,16 +127,7 @@ def _validate(request: dict) -> str:
         raise ProtocolError("unknown_operation")
     if request.keys() - REQUIRED_FIELDS - OPERATIONS[operation]:
         raise ProtocolError("invalid_request")
-    fields = OPERATIONS[operation] & request.keys()
-    if operation == "generate":
-        length = request.get("length")
-        if (
-            not isinstance(length, int)
-            or isinstance(length, bool)
-            or not isinstance(request.get("symbols"), bool)
-        ):
-            raise ProtocolError("invalid_request")
-    elif not all(isinstance(request[field], str) for field in fields):
+    if not _valid_operation_fields(operation, request):
         raise ProtocolError("invalid_request")
     if not OPERATION_REQUIRED_FIELDS.get(operation, set()) <= request.keys():
         raise ProtocolError("invalid_request")
@@ -132,6 +140,22 @@ def _validate(request: dict) -> str:
     if "path" in request and (not request["path"] or "\0" in request["path"]):
         raise ProtocolError("invalid_request")
     return operation
+
+
+def _valid_operation_fields(operation: str, request: dict) -> bool:
+    if operation == "generate":
+        length = request.get("length")
+        return (
+            isinstance(length, int) and not isinstance(length, bool)
+            and isinstance(request.get("symbols"), bool)
+        )
+    if operation == "import_legacy":
+        paths = request.get("paths")
+        return (
+            isinstance(paths, list) and 0 < len(paths) <= MAX_IMPORT_FILES
+            and all(isinstance(path, str) and path and "\0" not in path for path in paths)
+        )
+    return all(isinstance(request[field], str) for field in OPERATIONS[operation] & request.keys())
 
 
 class _Session:
@@ -154,6 +178,8 @@ class _Session:
             case _:
                 if self._vault is None:
                     raise ProtocolError("locked")
+                if operation in SETTINGS_OPERATIONS:
+                    return _settings_request(self._vault, operation, request, self._closed)
                 return _credential_request(self._vault, operation, request)
 
     def _open(self, operation: str, request: dict) -> dict:
@@ -187,11 +213,7 @@ class _Session:
             _regular_file(path)
             if not vault_has_security_key(path):
                 raise ProtocolError("key_failed")
-            window = int(request["window"], 16) if "window" in request else None
-            with open_security_key(
-                lambda: request.get("pin"), lambda _message: None,
-                cancel=self._closed, window=window,
-            ) as key:
+            with _security_key(request, self._closed) as key:
                 vault = Vault(path, security_key=key)
             if self._closed.is_set():
                 raise ProtocolError("key_interrupted")
@@ -217,6 +239,98 @@ class _Session:
             "unlocked": unlocked,
             "has_security_key": exists and vault_has_security_key(path),
         }
+
+
+def _security_key(request: dict, closed: Event):
+    window = int(request["window"], 16) if "window" in request else None
+    return open_security_key(
+        lambda: request.get("pin"), lambda _message: None,
+        cancel=closed, window=window,
+    )
+
+
+def _preflight_master(vault: Vault, master: str) -> None:
+    try:
+        vault.verify_master(master)
+    except VaultError as error:
+        raise ProtocolError("incorrect_master") from error
+
+
+def _settings_request(vault: Vault, operation: str, request: dict, closed: Event) -> dict:
+    try:
+        if operation == "backup":
+            destination = _settings_path(request["destination"], ".spm")
+            vault.backup(destination)
+            return {"saved": True}
+        if operation == "import_legacy":
+            return _import_legacy(vault, request["paths"])
+        return _change_unlock_method(vault, operation, request, closed)
+    except VaultConflict as error:
+        raise ProtocolError("write_conflict") from error
+    except SecurityKeyError as error:
+        code = error.code if error.code in ERROR_MESSAGES else "key_failed"
+        raise ProtocolError(code) from error
+    except (OSError, ValueError, VaultError) as error:
+        code = "backup_failed" if operation == "backup" else "write_failed"
+        raise ProtocolError(code) from error
+
+
+def _settings_path(value: str, extension: str) -> Path:
+    path = Path(value)
+    if "\0" in value or not path.is_absolute() or path.suffix.casefold() != extension:
+        raise ValueError("invalid selected file")
+    return path
+
+
+def _import_legacy(vault: Vault, paths: list[str]) -> dict:
+    entries = []
+    try:
+        for value in paths:
+            path = _settings_path(value, ".key")
+            _regular_file(path)
+            entries.append(read_legacy(path))
+    except (OSError, ValueError, VaultError) as error:
+        raise ProtocolError("import_failed") from error
+
+    names = {entry.name.casefold() for entry in vault.list()}
+    for entry in entries:
+        name = entry.name.casefold()
+        if name in names:
+            raise ProtocolError("entry_duplicate")
+        names.add(name)
+    vault.add(entries)
+    return {"entries": [_metadata(entry) for entry in entries]}
+
+
+def _change_unlock_method(vault: Vault, operation: str, request: dict, closed: Event) -> dict:
+    master = request["master"]
+    _preflight_master(vault, master)
+    match operation:
+        case "change_master":
+            new_master = request["new_master"]
+            if len(new_master) < MIN_MASTER_LENGTH or not new_master.strip():
+                raise ProtocolError("weak_master")
+            vault.change_master(new_master)
+        case "register_key":
+            if vault.has_security_key:
+                raise ProtocolError("already_registered")
+            if closed.is_set():
+                raise ProtocolError("key_interrupted")
+            try:
+                with _security_key(request, closed) as key:
+                    enrollment = key.enroll()
+            except SecurityKeyError:
+                raise
+            except VaultError as error:
+                raise ProtocolError("key_failed") from error
+            if closed.is_set():
+                raise ProtocolError("key_interrupted")
+            vault.add_security_key(master, enrollment)
+        case "remove_key":
+            if not vault.has_security_key:
+                raise ProtocolError("no_registered_key")
+            vault.remove_security_key(master)
+    return {"has_security_key": vault.has_security_key}
 
 
 def _generate(request: dict) -> dict:

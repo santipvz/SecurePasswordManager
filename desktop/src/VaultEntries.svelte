@@ -7,9 +7,10 @@
 
   type Entry = { name: string; username: string; url: string }
 
-  let { generation, entries = $bindable(), onSessionEnd }: {
+  let { generation, entries = $bindable(), writing = $bindable(), onSessionEnd }: {
     generation: number
     entries: Entry[]
+    writing: boolean
     onSessionEnd: (message: string) => Promise<void>
   } = $props()
 
@@ -280,7 +281,7 @@
     const input = passwordInput
     feedback = ""
     error = ""
-    busy = true
+    writing = busy = true
     try {
       let pending: Promise<Entry>
       try {
@@ -314,6 +315,7 @@
     } catch (reason) {
       if (current === viewRevision) handleError(reason)
     } finally {
+      if (current === viewRevision) writing = false
       busy = false
     }
   }
@@ -339,16 +341,18 @@
     const name = selected.name
     feedback = ""
     error = ""
-    busy = true
+    writing = busy = true
     try {
       await invoke("vault_delete", { generation, name })
       if (current !== viewRevision) return
       entries = entries.filter((entry) => entry.name !== name)
+      writing = false
       await focusSearch()
       feedback = "Credential deleted."
     } catch (reason) {
       if (current === viewRevision) handleError(reason)
     } finally {
+      if (current === viewRevision) writing = false
       busy = false
     }
   }
@@ -369,7 +373,10 @@
 
   onMount(() => {
     searchInput?.focus()
-    return clearView
+    return () => {
+      writing = false
+      clearView()
+    }
   })
 </script>
 

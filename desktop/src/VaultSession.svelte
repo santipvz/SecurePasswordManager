@@ -1,9 +1,10 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core"
-  import { FolderOpen, KeyRound, LockKeyhole, Moon, Plus, ShieldCheck, Sun } from "@lucide/svelte"
+  import { FolderOpen, KeyRound, LockKeyhole, Moon, Plus, Settings, ShieldCheck, Sun } from "@lucide/svelte"
   import { onMount, tick } from "svelte"
   import PasswordGenerator from "./PasswordGenerator.svelte"
   import VaultEntries from "./VaultEntries.svelte"
+  import VaultSettings from "./VaultSettings.svelte"
 
   type Status = {
     exists: boolean
@@ -13,7 +14,7 @@
     file_name: string | null
     native_key_prompt: boolean
   }
-  type Unlocked = { generation: number }
+  type Unlocked = { generation: number; has_security_key: boolean }
   type Entry = { name: string; username: string; url: string }
   type Entries = { entries: Entry[] }
   type Phase = "loading" | "choosing" | "locked" | "unlocking" | "unlocked" | "locking"
@@ -45,6 +46,11 @@
   let showGenerator = $state(false)
   let generatorHeading = $state<HTMLHeadingElement>()
   let generatorButton = $state<HTMLButtonElement>()
+  let settingsOpen = $state(false)
+  let settingsPending = $state(false)
+  let entryWritePending = $state(false)
+  let settingsButton = $state<HTMLButtonElement>()
+  let hasSecurityKey = $state(false)
   let phase = $state<Phase>("loading")
   let theme = $state<"light" | "dark">("light")
   let status = $state<Status>()
@@ -134,6 +140,7 @@
   async function endSession(message: string) {
     const current = ++revision
     generation = undefined
+    settingsOpen = false
     entries = []
     clearInputs()
     phase = "locking"
@@ -197,12 +204,26 @@
       }
       if (revision !== current) return
       generation = session.generation
+      hasSecurityKey = session.has_security_key
       lastActivity = -Infinity
       entries = metadata.entries
       phase = "unlocked"
     } catch (error) {
       if (revision === current) await endSession(errorMessage(error))
     }
+  }
+
+  async function showSettings(open: boolean) {
+    if (open && entryWritePending) return
+    settingsOpen = open
+    if (!open) {
+      await tick()
+      settingsButton?.focus()
+    }
+  }
+
+  function addImported(imported: Entry[]) {
+    entries = [...entries, ...imported].sort((a, b) => a.name.localeCompare(b.name))
   }
 
   function activity(event: KeyboardEvent | PointerEvent) {
@@ -244,6 +265,8 @@
     <div class="brand"><span class="brand-icon"><ShieldCheck size={20} /></span> Secure Password Manager</div>
     <div class="top-actions">
       {#if phase === "unlocked"}
+        <button class="icon-button" aria-label="Vault settings" aria-pressed={settingsOpen} disabled={settingsPending || entryWritePending} bind:this={settingsButton}
+          onclick={() => showSettings(!settingsOpen)}><Settings size={19} /></button>
         <button class="secondary" onclick={() => endSession("")}><LockKeyhole size={16} /> Lock vault</button>
       {/if}
       <button class="icon-button" aria-label={theme === "light" ? "Use dark theme" : "Use light theme"}
@@ -254,7 +277,12 @@
   </header>
 
   {#if phase === "unlocked" && generation !== undefined}
-    <VaultEntries {generation} bind:entries onSessionEnd={endSession} />
+    {#if settingsOpen}
+      <VaultSettings {generation} nativePrompt={Boolean(status?.native_key_prompt)} bind:hasSecurityKey bind:pending={settingsPending}
+        onClose={() => showSettings(false)} onLock={endSession} onImport={addImported} />
+    {:else}
+      <VaultEntries {generation} bind:entries bind:writing={entryWritePending} onSessionEnd={endSession} />
+    {/if}
   {:else}
     <main class="welcome">
       {#if showGenerator}

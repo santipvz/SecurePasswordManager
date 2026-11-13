@@ -14,8 +14,8 @@ use tauri::{
 use tokio::sync::Mutex;
 use zeroize::Zeroizing;
 
-use vault_process::{CredentialInput, Error};
-use vault_session::{Entries, Entry, Review, Unlocked, VaultSession, VaultStatus};
+use vault_process::{CredentialInput, Error, Operation, Secret};
+use vault_session::{Entries, Entry, Review, UnlockMethods, Unlocked, VaultSession, VaultStatus};
 
 type Vault<'a> = State<'a, Arc<VaultSession>>;
 
@@ -71,22 +71,105 @@ async fn vault_unlock_key(
     pin: Option<String>,
 ) -> Result<Unlocked, Error> {
     let pin = pin.map(Zeroizing::new);
-    #[cfg(windows)]
-    let parent = Some(format!(
+    let parent = key_parent(&window)?;
+    let pin = if cfg!(windows) { None } else { pin };
+    vault.unlock_key(generation, pin, parent).await
+}
+
+#[cfg(windows)]
+fn key_parent(window: &WebviewWindow) -> Result<Option<String>, Error> {
+    Ok(Some(format!(
         "{:x}",
         window.hwnd().map_err(|_| Error::KeyFailed)?.0 as usize
-    ));
-    #[cfg(not(windows))]
-    let parent = {
-        drop(window);
-        None
+    )))
+}
+
+#[cfg(not(windows))]
+fn key_parent(_window: &WebviewWindow) -> Result<Option<String>, Error> {
+    Ok(None)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum FileAction {
+    SaveBackup,
+    OpenBackup,
+    ImportLegacy,
+}
+
+#[derive(serde::Serialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+enum FileResult {
+    Saved,
+    SelectedBackup,
+    Imported { entries: Entries },
+}
+
+#[tauri::command]
+async fn vault_manage_files(
+    vault: Vault<'_>,
+    dialog: State<'_, Mutex<()>>,
+    window: WebviewWindow,
+    generation: u64,
+    action: FileAction,
+) -> Result<Option<FileResult>, Error> {
+    let _guard = dialog.try_lock().map_err(|_| Error::Busy)?;
+    if !vault.active(generation) {
+        return Err(Error::Locked);
+    }
+    let result = match action {
+        FileAction::SaveBackup => {
+            let Some(destination) = vault_dialog::backup_destination(&window).await? else {
+                return Ok(None);
+            };
+            vault.backup(generation, destination).await?;
+            FileResult::Saved
+        }
+        FileAction::OpenBackup => {
+            let Some(path) = vault_dialog::open_backup(&window).await? else {
+                return Ok(None);
+            };
+            vault.select_backup(generation, path).await?;
+            FileResult::SelectedBackup
+        }
+        FileAction::ImportLegacy => {
+            let Some(paths) = vault_dialog::legacy_files(&window).await? else {
+                return Ok(None);
+            };
+            let entries = vault.import_legacy(generation, paths).await?;
+            FileResult::Imported { entries }
+        }
     };
-    #[cfg(windows)]
-    let pin = {
-        drop(pin);
-        None
+    Ok(Some(result))
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
+enum UnlockAction {
+    ChangeMaster { master: Secret, new_master: Secret },
+    RegisterKey { master: Secret, pin: Option<Secret> },
+    RemoveKey { master: Secret },
+}
+
+#[tauri::command]
+async fn vault_manage_unlock(
+    vault: Vault<'_>,
+    window: WebviewWindow,
+    generation: u64,
+    request: UnlockAction,
+) -> Result<UnlockMethods, Error> {
+    let operation = match request {
+        UnlockAction::ChangeMaster { master, new_master } => {
+            Operation::ChangeMaster { master, new_master }
+        }
+        UnlockAction::RegisterKey { master, pin } => Operation::RegisterKey {
+            master,
+            pin: if cfg!(windows) { None } else { pin },
+            window: key_parent(&window)?,
+        },
+        UnlockAction::RemoveKey { master } => Operation::RemoveKey { master },
     };
-    vault.unlock_key(generation, pin, parent).await
+    vault.update_unlock_methods(generation, operation).await
 }
 
 #[tauri::command]
@@ -206,6 +289,8 @@ fn main() {
             vault_list,
             vault_generate,
             vault_review,
+            vault_manage_files,
+            vault_manage_unlock,
             vault_entry_notes,
             vault_reveal,
             vault_copy,
