@@ -5,6 +5,8 @@ fn main() {
         "vault_unlock_key",
         "vault_select",
         "vault_list",
+        "vault_generate",
+        "vault_review",
         "vault_entry_notes",
         "vault_reveal",
         "vault_copy",

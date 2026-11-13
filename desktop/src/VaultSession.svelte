@@ -2,6 +2,7 @@
   import { invoke } from "@tauri-apps/api/core"
   import { FolderOpen, KeyRound, LockKeyhole, Moon, Plus, ShieldCheck, Sun } from "@lucide/svelte"
   import { onMount, tick } from "svelte"
+  import PasswordGenerator from "./PasswordGenerator.svelte"
   import VaultEntries from "./VaultEntries.svelte"
 
   type Status = {
@@ -41,6 +42,9 @@
     timed_out: "The vault process timed out. Try again.",
   }
 
+  let showGenerator = $state(false)
+  let generatorHeading = $state<HTMLHeadingElement>()
+  let generatorButton = $state<HTMLButtonElement>()
   let phase = $state<Phase>("loading")
   let theme = $state<"light" | "dark">("light")
   let status = $state<Status>()
@@ -96,6 +100,14 @@
       if (revision === current) phase = "locked"
     }
     await focusWelcome(current)
+  }
+
+  async function toggleGenerator(show: boolean) {
+    clearInputs()
+    showGenerator = show
+    await tick()
+    if (show) generatorHeading?.focus()
+    else generatorButton?.focus()
   }
 
   async function choose(selection: Selection) {
@@ -194,6 +206,10 @@
   }
 
   function activity(event: KeyboardEvent | PointerEvent) {
+    if (event.isTrusted && event instanceof KeyboardEvent && event.key === "Escape" && showGenerator) {
+      void toggleGenerator(false)
+      return
+    }
     if (event.isTrusted && event instanceof KeyboardEvent && event.key === "Escape" && phase === "unlocking") {
       if (!creating) void endSession("")
       return
@@ -241,84 +257,94 @@
     <VaultEntries {generation} bind:entries onSessionEnd={endSession} />
   {:else}
     <main class="welcome">
-      <section class="unlock-card" aria-labelledby="vault-title">
-        <div class="vault-icon"><LockKeyhole size={28} strokeWidth={1.7} /></div>
-        <h1 id="vault-title">
-          {creating ? "Create a vault" : method === "key" && keyReady ? "Unlock with YubiKey" : "Unlock your vault"}
-        </h1>
-        <p class="muted welcome-copy">
-          {#if creating}
-            Choose a master password for <strong>{status?.file_name}</strong>. Keep it somewhere safe.
-          {:else if status?.creating && status.exists}
-            <strong>{status.file_name}</strong> already exists. Open it or choose a new filename.
-          {:else if keyReady && method === "key"}
-            {#if status?.native_key_prompt}
-              Connect your YubiKey and follow the Windows security prompt.
-            {:else}
-              Connect your YubiKey and touch it when it blinks. Leave the PIN blank if your key verifies by fingerprint.
-            {/if}
-          {:else if status?.exists}
-            Enter the master password for <strong>{status.file_name ?? "your default vault"}</strong>.
-          {:else}
-            Create a vault or open an existing .spm file.
-          {/if}
-        </p>
-        {#if feedback}<p class="error-note" role="alert">{feedback}</p>{/if}
-        {#if phase === "loading" || phase === "choosing" || phase === "locking"}
-          <div class="unlock-state" role="status">
-            <span class="spinner"></span>
-            {phase === "loading" ? "Checking for a vault…" : phase === "choosing" ? "Waiting for file selection…" : "Locking vault…"}
-          </div>
-        {:else if phase === "unlocking"}
-          <div class="unlock-state" role="status">
-            <span class="spinner"></span>
-            {creating ? "Creating vault…" : method === "key" ? "Waiting for your security key…" : "Unlocking vault…"}
-          </div>
-          {#if !creating}
-            <button class="secondary full" type="button" bind:this={cancelButton} onclick={() => endSession("")}>Cancel</button>
-          {/if}
-        {:else}
-          {#if creating || (status?.exists && !status.creating)}
-            <form onsubmit={submit} autocomplete="off">
-              {#if method === "key" && keyReady}
-                {#if !status?.native_key_prompt}
-                  <label class="password-label" for="key-pin">Security key PIN</label>
-                  <input class="password-input full" id="key-pin" type="password" bind:this={pinInput}
-                    autocomplete="off" autocapitalize="off" spellcheck={false} />
-                {/if}
-                <button class="primary full" type="submit" bind:this={keyButton}><KeyRound size={17} /> Use YubiKey</button>
+      {#if showGenerator}
+        <section class="unlock-card" aria-labelledby="generator-title">
+          <h1 id="generator-title" tabindex="-1" bind:this={generatorHeading}>Generate a password</h1>
+          <div class="standalone-generator"><PasswordGenerator /></div>
+          <button class="text-button full" onclick={() => toggleGenerator(false)}>Back to vault</button>
+        </section>
+      {:else}
+        <section class="unlock-card" aria-labelledby="vault-title">
+          <div class="vault-icon"><LockKeyhole size={28} strokeWidth={1.7} /></div>
+          <h1 id="vault-title">
+            {creating ? "Create a vault" : method === "key" && keyReady ? "Unlock with YubiKey" : "Unlock your vault"}
+          </h1>
+          <p class="muted welcome-copy">
+            {#if creating}
+              Choose a master password for <strong>{status?.file_name}</strong>. Keep it somewhere safe.
+            {:else if status?.creating && status.exists}
+              <strong>{status.file_name}</strong> already exists. Open it or choose a new filename.
+            {:else if keyReady && method === "key"}
+              {#if status?.native_key_prompt}
+                Connect your YubiKey and follow the Windows security prompt.
               {:else}
-                <label class="password-label" for="master-password">Master password</label>
-                <input class="password-input full" id="master-password" type="password" bind:this={passwordInput}
-                  autocomplete="off" autocapitalize="off" spellcheck={false} required />
-                {#if creating}
-                  <label class="password-label" for="confirm-master">Confirm master password</label>
-                  <input class="password-input full" id="confirm-master" type="password" bind:this={confirmationInput}
-                    autocomplete="off" autocapitalize="off" spellcheck={false} required />
-                {/if}
-                <button class="primary full" type="submit"><KeyRound size={17} /> {creating ? "Create vault" : "Unlock vault"}</button>
+                Connect your YubiKey and touch it when it blinks. Leave the PIN blank if your key verifies by fingerprint.
               {/if}
-            </form>
-            {#if keyReady}
-              <button class="secondary full" onclick={() => switchMethod(method === "key" ? "password" : "key")}>
-                {method === "key" ? "Use master password" : "Unlock with YubiKey"}
-              </button>
+            {:else if status?.exists}
+              Enter the master password for <strong>{status.file_name ?? "your default vault"}</strong>.
+            {:else}
+              Create a vault or open an existing .spm file.
+            {/if}
+          </p>
+          {#if feedback}<p class="error-note" role="alert">{feedback}</p>{/if}
+          {#if phase === "loading" || phase === "choosing" || phase === "locking"}
+            <div class="unlock-state" role="status">
+              <span class="spinner"></span>
+              {phase === "loading" ? "Checking for a vault…" : phase === "choosing" ? "Waiting for file selection…" : "Locking vault…"}
+            </div>
+          {:else if phase === "unlocking"}
+            <div class="unlock-state" role="status">
+              <span class="spinner"></span>
+              {creating ? "Creating vault…" : method === "key" ? "Waiting for your security key…" : "Unlocking vault…"}
+            </div>
+            {#if !creating}
+              <button class="secondary full" type="button" bind:this={cancelButton} onclick={() => endSession("")}>Cancel</button>
+            {/if}
+          {:else}
+            {#if creating || (status?.exists && !status.creating)}
+              <form onsubmit={submit} autocomplete="off">
+                {#if method === "key" && keyReady}
+                  {#if !status?.native_key_prompt}
+                    <label class="password-label" for="key-pin">Security key PIN</label>
+                    <input class="password-input full" id="key-pin" type="password" bind:this={pinInput}
+                      autocomplete="off" autocapitalize="off" spellcheck={false} />
+                  {/if}
+                  <button class="primary full" type="submit" bind:this={keyButton}><KeyRound size={17} /> Use YubiKey</button>
+                {:else}
+                  <label class="password-label" for="master-password">Master password</label>
+                  <input class="password-input full" id="master-password" type="password" bind:this={passwordInput}
+                    autocomplete="off" autocapitalize="off" spellcheck={false} required />
+                  {#if creating}
+                    <label class="password-label" for="confirm-master">Confirm master password</label>
+                    <input class="password-input full" id="confirm-master" type="password" bind:this={confirmationInput}
+                      autocomplete="off" autocapitalize="off" spellcheck={false} required />
+                  {/if}
+                  <button class="primary full" type="submit"><KeyRound size={17} /> {creating ? "Create vault" : "Unlock vault"}</button>
+                {/if}
+              </form>
+              {#if keyReady}
+                <button class="secondary full" onclick={() => switchMethod(method === "key" ? "password" : "key")}>
+                  {method === "key" ? "Use master password" : "Unlock with YubiKey"}
+                </button>
+              {/if}
+            {/if}
+            <div class="welcome-footer">
+              <button class="text-button" onclick={() => choose("new")}><Plus size={16} /> {creating ? "Choose new file" : "Create vault"}</button>
+              <button class="text-button" bind:this={openButton} onclick={() => choose("existing")}><FolderOpen size={16} /> Open file</button>
+            </div>
+            <button class="text-button full" bind:this={generatorButton} onclick={() => toggleGenerator(true)}>Password generator</button>
+            {#if status?.file_name || !status}
+              <button class="text-button full" onclick={() => choose("default")}>Check default location</button>
             {/if}
           {/if}
-          <div class="welcome-footer">
-            <button class="text-button" onclick={() => choose("new")}><Plus size={16} /> {creating ? "Choose new file" : "Create vault"}</button>
-            <button class="text-button" bind:this={openButton} onclick={() => choose("existing")}><FolderOpen size={16} /> Open file</button>
-          </div>
-          {#if status?.file_name || !status}
-            <button class="text-button full" onclick={() => choose("default")}>Check default location</button>
-          {/if}
-        {/if}
-      </section>
+        </section>
+      {/if}
     </main>
   {/if}
 </div>
 
 <style>
+  .standalone-generator { margin: 16px 0; }
   .password-label { display: block; margin-bottom: 6px; font-weight: 600; }
   .password-input {
     min-height: 43px;

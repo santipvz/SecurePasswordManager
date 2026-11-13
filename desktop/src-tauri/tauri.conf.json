@@ -26,6 +26,8 @@
             "allow-vault-unlock-key",
             "allow-vault-select",
             "allow-vault-list",
+            "allow-vault-generate",
+            "allow-vault-review",
             "allow-vault-entry-notes",
             "allow-vault-reveal",
             "allow-vault-copy",

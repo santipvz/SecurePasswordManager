@@ -4,11 +4,14 @@ import json
 import re
 import stat
 import sys
+from dataclasses import asdict
 from pathlib import Path
 from queue import Queue
 from threading import Event, Thread
 from typing import BinaryIO
 
+from .domain.review import MIN_REVIEW_LENGTH, review_credentials
+from .sec_pass_manager import MAX_LENGTH, MIN_LENGTH, generate_password
 from .security_key import SecurityKeyError, open_security_key
 from .vault import (
     MIN_MASTER_LENGTH, Entry, Vault, VaultConflict, VaultError, default_vault_path,
@@ -24,6 +27,8 @@ OPERATIONS = {
     "open_key": {"path", "pin", "window"},
     "create": {"path", "master"},
     "list": {"query"},
+    "generate": {"length", "symbols"},
+    "review": set(),
     "entry_notes": {"name"},
     "entry_password": {"name"},
     "save_entry": {"previous", "name", "password", "username", "url", "notes"},
@@ -33,6 +38,7 @@ OPERATIONS = {
 REQUIRED_FIELDS = {"version", "id", "operation"}
 OPERATION_REQUIRED_FIELDS = {
     "open": {"master"},
+    "generate": {"length", "symbols"},
     "create": {"path", "master"},
     "entry_notes": {"name"},
     "entry_password": {"name"},
@@ -59,6 +65,7 @@ ERROR_MESSAGES = {
     "pin_invalid": "The FIDO2 PIN is incorrect.",
     "pin_required": "Enter the FIDO2 key PIN.",
     "wrong_key": "The connected key has no credential for this vault.",
+    "generator_length": f"Choose a length from {MIN_LENGTH} to {MAX_LENGTH} characters.",
     "entry_missing": "The credential no longer exists.",
     "entry_duplicate": "A credential with that name already exists.",
     "entry_invalid": "Enter a name and password for the credential.",
@@ -103,9 +110,17 @@ def _validate(request: dict) -> str:
         raise ProtocolError("unknown_operation")
     if request.keys() - REQUIRED_FIELDS - OPERATIONS[operation]:
         raise ProtocolError("invalid_request")
-    for field in OPERATIONS[operation] & request.keys():
-        if not isinstance(request[field], str):
+    fields = OPERATIONS[operation] & request.keys()
+    if operation == "generate":
+        length = request.get("length")
+        if (
+            not isinstance(length, int)
+            or isinstance(length, bool)
+            or not isinstance(request.get("symbols"), bool)
+        ):
             raise ProtocolError("invalid_request")
+    elif not all(isinstance(request[field], str) for field in fields):
+        raise ProtocolError("invalid_request")
     if not OPERATION_REQUIRED_FIELDS.get(operation, set()) <= request.keys():
         raise ProtocolError("invalid_request")
     if "window" in request and (
@@ -131,6 +146,8 @@ class _Session:
                 return self._status(request)
             case "open" | "open_key" | "create":
                 return self._open(operation, request)
+            case "generate":
+                return _generate(request)
             case "lock":
                 self._vault = None
                 return {"unlocked": False}
@@ -202,6 +219,13 @@ class _Session:
         }
 
 
+def _generate(request: dict) -> dict:
+    try:
+        return {"password": generate_password(request["length"], symbols=request["symbols"])}
+    except ValueError as error:
+        raise ProtocolError("generator_length") from error
+
+
 def _metadata(entry: Entry) -> dict:
     return {"name": entry.name, "username": entry.username, "url": entry.url}
 
@@ -244,6 +268,9 @@ def _credential_request(vault: Vault, operation: str, request: dict) -> dict:
             case "list":
                 entries = vault.list(request.get("query", ""))
                 return {"entries": [_metadata(entry) for entry in entries]}
+            case "review":
+                findings = review_credentials(vault.list())
+                return {**asdict(findings), "minimum_length": MIN_REVIEW_LENGTH}
             case "entry_notes":
                 return {"notes": _entry(vault, request["name"]).notes}
             case "entry_password":
