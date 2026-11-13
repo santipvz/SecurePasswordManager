@@ -290,3 +290,72 @@ async fn timeout_and_dropped_request_discard_the_process() {
     assert!(session.process.lock().await.is_none());
     session.close();
 }
+
+#[tokio::test]
+async fn selecting_another_vault_rejects_the_previous_generation() {
+    let (dir, session) = fake_core(
+        r#"    if operation == "open":
+        assert request["path"] == str(root / "selected.spm")
+        reply(dict(unlocked=True, has_security_key=False))
+"#,
+    );
+    let old = session.status().await.unwrap().generation;
+    let selected = dir.path().join("selected.spm");
+    let selection = session.begin_selection(Some(old)).unwrap();
+    assert_eq!(
+        session.unlock(old, MASTER.to_owned().into()).await.err(),
+        Some(Error::Busy)
+    );
+    let next = selection.commit(Some(selected), false).unwrap();
+    assert_eq!(
+        session.begin_selection(Some(old)).err(),
+        Some(Error::Locked)
+    );
+    assert_eq!(
+        session.unlock(old, MASTER.to_owned().into()).await.err(),
+        Some(Error::Locked)
+    );
+    let status = session.selected_status(next).await.unwrap();
+    assert_eq!(status.file_name.as_deref(), Some("selected.spm"));
+    assert!(!status.creating);
+    let unlocked = session
+        .unlock(next, MASTER.to_owned().into())
+        .await
+        .unwrap();
+    assert!(session.active(unlocked.generation));
+    assert_eq!(
+        session.begin_selection(Some(next)).err(),
+        Some(Error::Locked)
+    );
+    session.lock().await;
+}
+
+#[tokio::test]
+async fn cancelling_a_key_request_closes_stdin_and_discards_its_reply() {
+    let (dir, session) = fake_core(
+        r#"    if operation == "open_key":
+        assert request["pin"] == "synthetic PIN"
+        assert "master" not in request
+        (root / "started").touch()
+        assert sys.stdin.read() == ""
+        (root / "cancelled").touch()
+        reply(dict(unlocked=True, has_security_key=True))
+"#,
+    );
+    let generation = session.status().await.unwrap().generation;
+    let task = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move {
+            session
+                .unlock_key(generation, Some("synthetic PIN".to_owned().into()), None)
+                .await
+        }
+    });
+    wait_for_file(&dir.path().join("started")).await;
+    let next = session.lock().await;
+    assert_eq!(task.await.unwrap().err(), Some(Error::Locked));
+    assert_ne!(next, generation);
+    assert!(!session.active(generation));
+    assert!(dir.path().join("cancelled").is_file());
+    assert!(session.process.lock().await.is_none());
+}

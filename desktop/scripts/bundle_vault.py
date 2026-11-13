@@ -21,6 +21,7 @@ def main() -> None:
         subprocess.run(
             [
                 sys.executable, "-m", "PyInstaller", "--noconfirm", "--onedir",
+                "--collect-data", "fido2",
                 "--name", name, "--distpath", str(work / "dist"),
                 "--workpath", str(work / "build"), "--specpath", str(work),
                 str(scripts / "vault_process_entry.py"),

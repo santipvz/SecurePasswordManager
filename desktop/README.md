@@ -1,6 +1,10 @@
 # Desktop app
 
-The native app opens the default vault created by the Python app. It unlocks with the master password and displays entry names, usernames, and websites. Choose **Lock vault** to end the session immediately. The app also locks after five minutes without keyboard or pointer input.
+The native app checks the default vault and can open another `.spm` file or create a new one through the system file dialog. Creating a vault requires a master password of at least 15 characters. An existing file is preserved if you select its name while creating a vault.
+
+If the selected vault has a registered YubiKey, choose **Unlock with YubiKey**. On Windows, follow the system security prompt. On Linux and macOS, enter the FIDO2 PIN if your key requires one and touch the key when it blinks. You can cancel the attempt or switch back to the master password. To register a new key in this version, use the Python app.
+
+An unlocked vault displays entry names, usernames, and websites. Choose **Lock vault** to end the session immediately. The app also locks after five minutes without keyboard or pointer input.
 
 Install Python 3.11 or later, Node.js 22.12 or later in the 22 series, a stable Rust toolchain, and the native packages listed in the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). Activate a Python virtual environment and run these commands from the repository root:
 
