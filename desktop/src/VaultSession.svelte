@@ -48,6 +48,7 @@
   let generatorButton = $state<HTMLButtonElement>()
   let settingsOpen = $state(false)
   let settingsPending = $state(false)
+  let entryWritePending = $state(false)
   let settingsButton = $state<HTMLButtonElement>()
   let hasSecurityKey = $state(false)
   let phase = $state<Phase>("loading")
@@ -213,6 +214,7 @@
   }
 
   async function showSettings(open: boolean) {
+    if (open && entryWritePending) return
     settingsOpen = open
     if (!open) {
       await tick()
@@ -263,7 +265,7 @@
     <div class="brand"><span class="brand-icon"><ShieldCheck size={20} /></span> Secure Password Manager</div>
     <div class="top-actions">
       {#if phase === "unlocked"}
-        <button class="icon-button" aria-label="Vault settings" aria-pressed={settingsOpen} disabled={settingsPending} bind:this={settingsButton}
+        <button class="icon-button" aria-label="Vault settings" aria-pressed={settingsOpen} disabled={settingsPending || entryWritePending} bind:this={settingsButton}
           onclick={() => showSettings(!settingsOpen)}><Settings size={19} /></button>
         <button class="secondary" onclick={() => endSession("")}><LockKeyhole size={16} /> Lock vault</button>
       {/if}
@@ -279,7 +281,7 @@
       <VaultSettings {generation} nativePrompt={Boolean(status?.native_key_prompt)} bind:hasSecurityKey bind:pending={settingsPending}
         onClose={() => showSettings(false)} onLock={endSession} onImport={addImported} />
     {:else}
-      <VaultEntries {generation} bind:entries onSessionEnd={endSession} />
+      <VaultEntries {generation} bind:entries bind:writing={entryWritePending} onSessionEnd={endSession} />
     {/if}
   {:else}
     <main class="welcome">
