@@ -7,7 +7,8 @@ temporary=$(mktemp "${report}.XXXXXX")
 trap 'rm -f -- "$temporary"' EXIT
 
 status=0
-"$scanner" scan source --lockfile=uv.lock --lockfile=desktop/package-lock.json \
+# Apply the same advisory policy to every lockfile.
+"$scanner" scan source --config=/dev/null --lockfile=uv.lock --lockfile=desktop/package-lock.json \
   --lockfile=desktop/src-tauri/Cargo.lock --all-vulns --all-packages \
   --format=json --output-file="$temporary" || status=$?
 if [[ $status != 0 && $status != 1 ]]; then

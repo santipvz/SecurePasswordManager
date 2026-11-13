@@ -26,7 +26,7 @@ With [OSV-Scanner v2.7.1](https://github.com/google/osv-scanner/releases/tag/v2.
 bash scripts/scan-dependencies.sh /tmp/spm-dependencies.json
 scan_config=$(mktemp -d)
 printf '[extend]\nuseDefault = true\n' > "$scan_config/gitleaks.toml"
-gitleaks git --redact --no-banner --log-opts=HEAD --config "$scan_config/gitleaks.toml" \
+gitleaks git --redact --no-banner --log-opts='--diff-merges=first-parent HEAD' --config "$scan_config/gitleaks.toml" \
   --gitleaks-ignore-path "$scan_config" --ignore-gitleaks-allow
 ```
 
