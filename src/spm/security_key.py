@@ -5,7 +5,7 @@ from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from secrets import token_bytes
-from threading import Event
+from threading import Event, Thread
 
 from .application.ports import KEY_SIZE, PRF_SALT_SIZE, KeyEnrollment
 from .domain.credentials import VaultError
@@ -124,14 +124,40 @@ def _fido_operation():
 
 
 class _FidoSecurityKey:
-    def __init__(self, client, cancel):
+    def __init__(self, client, cancel, *, native_prompt=False):
         self._client = client
         self._cancel = cancel
+        self._native_prompt = native_prompt
         self._server = Fido2Server(
             PublicKeyCredentialRpEntity(id=RP_ID, name="Secure Password Manager"),
             verify_origin=lambda origin: origin == ORIGIN,
         )
         self._server.timeout = TIMEOUT_MS
+
+    @contextmanager
+    def _ceremony(self):
+        if not self._native_prompt or self._cancel is None:
+            yield self._cancel
+            return
+
+        # WindowsClient sets its event on success. Bridge cancellation to a
+        # fresh event for each WebAuthn call without changing the caller's event.
+        if self._cancel.is_set():
+            raise SecurityKeyError("key_interrupted", "The security key request ended.")
+        native_cancel = Event()
+
+        def relay_cancellation():
+            while not native_cancel.is_set():
+                if self._cancel.wait(0.025):
+                    native_cancel.set()
+
+        relay = Thread(target=relay_cancellation, daemon=True)
+        relay.start()
+        try:
+            yield native_cancel
+        finally:
+            native_cancel.set()
+            relay.join()
 
     def enroll(self) -> KeyEnrollment:
         """Register a non-discoverable credential and prove it can produce a PRF secret."""
@@ -148,7 +174,8 @@ class _FidoSecurityKey:
                     "enforceCredentialProtectionPolicy": True,
                 },
             )
-            response = self._client.make_credential(options.public_key, self._cancel)
+            with self._ceremony() as cancel:
+                response = self._client.make_credential(options.public_key, cancel)
             auth_data = self._server.register_complete(state, response)
             prf = AuthenticatorExtensionsPRFOutputs.from_dict(response.client_extension_results.prf)
             if prf is None or not prf.enabled or auth_data.credential_data is None:
@@ -167,7 +194,8 @@ class _FidoSecurityKey:
                 extensions={"prf": {"eval": {"first": salt}}},
             )
             request = replace(options.public_key, hints=[PublicKeyCredentialHint.SECURITY_KEY])
-            response = self._client.get_assertion(request, self._cancel).get_response(0)
+            with self._ceremony() as cancel:
+                response = self._client.get_assertion(request, cancel).get_response(0)
             self._server.authenticate_complete(state, [stored], response)
             prf = AuthenticatorExtensionsPRFOutputs.from_dict(response.client_extension_results.prf)
             if prf is None or prf.results is None or len(prf.results.first) != KEY_SIZE:
@@ -193,7 +221,7 @@ def open_security_key(
             raise VaultError("Windows could not access the key through WebAuthn.") from error
         if not WindowsClient.is_available():
             raise VaultError("This version of Windows does not provide access to FIDO2 keys.")
-        yield _FidoSecurityKey(WindowsClient(collector, handle=window), cancel)
+        yield _FidoSecurityKey(WindowsClient(collector, handle=window), cancel, native_prompt=True)
         return
 
     with ExitStack() as stack:

@@ -102,10 +102,9 @@ def _validate(request: dict) -> str:
 
 
 class _Session:
-    def __init__(self, closed: Event, key_cancel: Event):
+    def __init__(self, closed: Event):
         self._vault: Vault | None = None
         self._closed = closed
-        self._key_cancel = key_cancel
 
     def execute(self, operation: str, request: dict) -> dict:
         """Run a validated operation against this connection's vault session."""
@@ -151,8 +150,6 @@ class _Session:
             raise ProtocolError("create_failed") from error
 
     def _open_key(self, path: Path, request: dict) -> None:
-        # Windows WebAuthn also signals its event when a request completes.
-        self._key_cancel.clear()
         if self._closed.is_set():
             raise ProtocolError("key_interrupted")
         try:
@@ -162,7 +159,7 @@ class _Session:
             window = int(request["window"], 16) if "window" in request else None
             with open_security_key(
                 lambda: request.get("pin"), lambda _message: None,
-                cancel=self._key_cancel, window=window,
+                cancel=self._closed, window=window,
             ) as key:
                 vault = Vault(path, security_key=key)
             if self._closed.is_set():
@@ -231,7 +228,7 @@ def _send(output: BinaryIO, reply: dict) -> None:
     output.flush()
 
 
-def _read_requests(source: BinaryIO, requests: Queue, closed: Event, key_cancel: Event) -> None:
+def _read_requests(source: BinaryIO, requests: Queue, closed: Event) -> None:
     # Keep reading while an authenticator is waiting for touch or a Windows prompt.
     try:
         while line := source.readline(MAX_REQUEST_BYTES + 1):
@@ -241,16 +238,15 @@ def _read_requests(source: BinaryIO, requests: Queue, closed: Event, key_cancel:
             del line
     finally:
         closed.set()
-        key_cancel.set()
         requests.put(None)
 
 
 def serve(source: BinaryIO, output: BinaryIO) -> int:
     """Serve one session until EOF or an oversized frame."""
-    closed, key_cancel = Event(), Event()
+    closed = Event()
     requests: Queue[bytes | None] = Queue(maxsize=1)
-    Thread(target=_read_requests, args=(source, requests, closed, key_cancel), daemon=True).start()
-    session = _Session(closed, key_cancel)
+    Thread(target=_read_requests, args=(source, requests, closed), daemon=True).start()
+    session = _Session(closed)
     while (line := requests.get()) is not None:
         if len(line) > MAX_REQUEST_BYTES:
             code = "request_too_large"

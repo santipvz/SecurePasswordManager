@@ -5,6 +5,7 @@ import hmac
 import tempfile
 import unittest
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -101,6 +102,23 @@ class WebAuthnSecurityKeyTests(unittest.TestCase):
                 cause.winerror = hresult - (1 << 32)
                 error = security_key.ClientError.ERR.OTHER_ERROR(cause)
                 self.assertEqual(security_key._client_error(error).code, code)
+
+    def test_native_ceremonies_separate_completion_from_caller_cancellation(self):
+        cancelled = Event()
+        device = security_key._FidoSecurityKey(Mock(), cancelled, native_prompt=True)
+        with device._ceremony() as registration:
+            self.assertFalse(registration.is_set())
+            registration.set()  # WindowsClient signals successful completion.
+        self.assertFalse(cancelled.is_set())
+        with device._ceremony() as proof:
+            self.assertIsNot(proof, registration)
+            self.assertFalse(proof.is_set())
+            cancelled.set()
+            self.assertTrue(proof.wait(1))
+        with self.assertRaises(security_key.SecurityKeyError) as caught:
+            with device._ceremony():
+                self.fail("A cancelled request must not start another ceremony")
+        self.assertEqual(caught.exception.code, "key_interrupted")
 
     def test_signed_assertion_requires_user_verification_and_prf_output(self):
         from cryptography.hazmat.primitives import hashes

@@ -138,8 +138,7 @@ class VaultProtocolTests(unittest.TestCase):
                         started.set()
                         if error:
                             raise SecurityKeyError(error, "sensitive adapter details")
-                        # Mirror Windows WebAuthn's normal completion signal.
-                        cancel.set()
+                        self.assertFalse(cancel.is_set())
                         yield device
                         finished.set()
 
