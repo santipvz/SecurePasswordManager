@@ -122,8 +122,16 @@ pub(crate) struct Process {
 }
 
 impl Process {
-    pub(crate) fn start(executable: &Path, generation: u64) -> Result<Self, Error> {
+    pub(crate) fn start(
+        executable: &Path,
+        generation: u64,
+        #[cfg(test)] directory: Option<&Path>,
+    ) -> Result<Self, Error> {
         let mut command = Command::new(executable);
+        #[cfg(test)]
+        if let Some(directory) = directory {
+            command.current_dir(directory);
+        }
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

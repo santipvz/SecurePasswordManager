@@ -120,6 +120,8 @@ pub(crate) struct VaultSession {
     state: watch::Sender<Session>,
     idle_timeout: Duration,
     request_timeout: Duration,
+    #[cfg(test)]
+    test_directory: Option<PathBuf>,
 }
 
 impl VaultSession {
@@ -130,7 +132,16 @@ impl VaultSession {
             state: watch::Sender::new(Session::default()),
             idle_timeout: IDLE_TIMEOUT,
             request_timeout: REQUEST_TIMEOUT,
+            #[cfg(test)]
+            test_directory: None,
         }
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    fn with_test_directory(executable: PathBuf, directory: &Path) -> Self {
+        let mut session = Self::new(executable);
+        session.test_directory = Some(directory.to_owned());
+        session
     }
 
     fn invalidate(&self, generation: Option<u64>, close: bool) {
@@ -399,7 +410,12 @@ impl VaultSession {
                 self.invalidate(Some(generation), false);
                 return Err(Error::Locked);
             }
-            *slot = Some(Process::start(&self.executable, generation)?);
+            *slot = Some(Process::start(
+                &self.executable,
+                generation,
+                #[cfg(test)]
+                self.test_directory.as_deref(),
+            )?);
         }
         let mut child = slot.take().ok_or(Error::ProcessUnavailable)?;
         let key_request = matches!(operation, Operation::OpenKey { .. });
