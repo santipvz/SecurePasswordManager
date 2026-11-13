@@ -13,6 +13,7 @@ from threading import Event, Thread
 from time import monotonic, sleep
 from unittest.mock import Mock, patch
 
+from spm.sec_pass_manager import MAX_LENGTH, MIN_LENGTH, SYMBOLS
 from spm.security_key import SecurityKeyError
 from spm.vault import Entry, Vault
 from spm.vault_protocol import MAX_REQUEST_BYTES, serve
@@ -264,6 +265,59 @@ class VaultProtocolTests(unittest.TestCase):
                 self.assertEqual(process.stderr.read(), b"")
             self.assertEqual(path.read_bytes(), snapshot)
             self.assertEqual([entry.name for entry in Vault(path, MASTER).list()], ["External"])
+
+    def test_generator_accepts_bounds_and_rejects_invalid_options_while_locked(self):
+        result, replies = self.run_process(b"".join([
+            frame(1, "generate", length=MIN_LENGTH, symbols=False),
+            frame(2, "generate", length=MAX_LENGTH, symbols=True),
+            frame(3, "generate", length=MIN_LENGTH - 1, symbols=True),
+            frame(4, "generate", length=MAX_LENGTH + 1, symbols=True),
+            frame(5, "generate", length=True, symbols=True),
+            frame(6, "generate", length=24, symbols="false"),
+            frame(7, "generate", length=24),
+        ]))
+        self.assertEqual(result.returncode, 0)
+        for reply, length, symbols in zip(replies[:2], [MIN_LENGTH, MAX_LENGTH], [False, True]):
+            password = reply["result"]["password"]
+            self.assertEqual(len(password), length)
+            self.assertTrue(any(character.islower() for character in password))
+            self.assertTrue(any(character.isupper() for character in password))
+            self.assertTrue(any(character.isdigit() for character in password))
+            self.assertEqual(any(character in SYMBOLS for character in password), symbols)
+        self.assertEqual([reply["error"]["code"] for reply in replies[2:]], [
+            "generator_length", "generator_length", "invalid_request",
+            "invalid_request", "invalid_request",
+        ])
+
+    def test_review_reports_only_names_and_leaves_each_vault_unchanged(self):
+        clean = Entry("Unique", "a unique synthetic test password")
+        affected = [Entry("Mail", "test-only"), Entry("Work", "test-only"), clean]
+        for entries, short, reused in (
+            ([], [], []), ([clean], [], []), (affected, ["Mail", "Work"], [["Mail", "Work"]]),
+        ):
+            with self.subTest(entries=len(entries)), TemporaryDirectory() as directory:
+                path = Path(directory) / "review.spm"
+                Vault.create(path, MASTER)
+                if entries:
+                    Vault(path, MASTER).add(entries)
+                snapshot = path.read_bytes()
+                result, replies = self.run_process(b"".join([
+                    frame(1, "review"),
+                    frame(2, "open", path=str(path), master=MASTER),
+                    frame(3, "generate", length=24, symbols=False),
+                    frame(4, "review"),
+                    frame(5, "lock"),
+                    frame(6, "review"),
+                ]))
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(replies[0]["error"]["code"], "locked")
+                self.assertEqual(replies[3]["result"], {
+                    "total": len(entries), "short": short, "reused": reused, "minimum_length": 15,
+                })
+                self.assertEqual(replies[5]["error"]["code"], "locked")
+                self.assertNotIn(b"test-only", result.stdout)
+                self.assertNotIn(b"a unique synthetic test password", result.stdout)
+                self.assertEqual(path.read_bytes(), snapshot)
 
     def test_oversized_frame_ends_the_session(self):
         result, replies = self.run_process(b"x" * MAX_REQUEST_BYTES + b"\n" + frame(2, "list"))

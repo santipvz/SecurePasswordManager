@@ -10,6 +10,8 @@ Requests are UTF-8 JSON objects on separate lines. The maximum request size is 6
 | `open` | `master` password and optional absolute `path` | `unlocked: true` and `has_security_key` after authenticating either existing vault format with its master password. |
 | `open_key` | Optional absolute `path`, optional FIDO2 `pin` on Linux and macOS, and optional hexadecimal parent `window` handle on Windows | `unlocked: true` and `has_security_key: true` after authenticating the registered FIDO2 credential. Windows obtains the PIN through its system prompt. |
 | `create` | Absolute `path` and `master` password | `unlocked: true` and `has_security_key: false` after creating and opening a new encrypted vault. An existing file is preserved. |
+| `generate` | Integer `length` between 12 and 256, boolean `symbols` | A freshly generated `password`. Works without unlocking a vault. |
+| `review` | None | `total`, `minimum_length`, `short` credential names, and `reused` groups of credential names. Requires an unlocked session and leaves the vault unchanged. |
 | `list` | Optional `query` string | `entries` containing only `name`, `username`, and `url`. Requires an unlocked session. |
 | `entry_notes` | Credential `name` | Only the requested credential's `notes`. |
 | `entry_password` | Credential `name` | Only the requested credential's `password`. Rust consumes the value locally for clipboard requests. |
