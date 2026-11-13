@@ -40,11 +40,12 @@ Require the Python and desktop test evidence, the dependency report, and the sec
 
 ## Measure the desktop on Ubuntu
 
-Install `webkit2gtk-driver`, `xvfb`, and `xauth` alongside the normal desktop build prerequisites. Build the frontend and bundled Python core first, then run the optimized build under a virtual display.
+Install `webkit2gtk-driver`, `xvfb`, `xauth`, and `dbus-daemon` alongside the normal desktop build prerequisites. Build the frontend and bundled Python core first, then run the optimized build under a virtual X11 display with its own D-Bus session and software rendering.
 
 ```sh
 cargo build --release --locked --features custom-protocol --manifest-path desktop/src-tauri/Cargo.toml
-WEBKIT_DISABLE_DMABUF_RENDERER=1 xvfb-run -a -e /dev/stderr uv run --no-sync python scripts/benchmark_desktop.py \
+GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+  xvfb-run -a -e /dev/stderr dbus-run-session -- uv run --no-sync python scripts/benchmark_desktop.py \
   desktop/src-tauri/target/release/secure-password-manager-desktop /tmp/desktop-performance.json
 ```
 

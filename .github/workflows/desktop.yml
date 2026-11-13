@@ -39,7 +39,7 @@ jobs:
         working-directory: desktop
       - name: Install Tauri build prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev webkit2gtk-driver xvfb xauth
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev webkit2gtk-driver xvfb xauth dbus-daemon
       - run: uv sync --locked --python "3.12" --no-install-project --extra yubikey --group build --group desktop-build
       - run: uv sync --locked --python "3.12" --no-build-isolation-package sec-pass-manager --extra yubikey --group build --group desktop-build
       - run: uv run --no-sync python desktop/scripts/bundle_vault.py
@@ -54,9 +54,11 @@ jobs:
       - name: Measure startup, search, and memory
         if: runner.os == 'Linux'
         env:
+          GDK_BACKEND: x11
+          LIBGL_ALWAYS_SOFTWARE: '1'
           WEBKIT_DISABLE_DMABUF_RENDERER: '1'
         run: |
-          xvfb-run -a -e /dev/stderr uv run --no-sync python scripts/benchmark_desktop.py \
+          xvfb-run -a -e /dev/stderr dbus-run-session -- uv run --no-sync python scripts/benchmark_desktop.py \
             desktop/src-tauri/target/release/secure-password-manager-desktop "$RUNNER_TEMP/desktop-performance.json"
       - name: Upload performance results
         if: runner.os == 'Linux'
