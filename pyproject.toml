@@ -21,6 +21,7 @@ yubikey = ["fido2>=2.2.1,<3"]
 
 [project.scripts]
 cpass = "spm.console_interface:main"
+cpass-vault-process = "spm.vault_protocol:main"
 
 [project.gui-scripts]
 cpass-desktop = "spm.desktop_interface:main"
