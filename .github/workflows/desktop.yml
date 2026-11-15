@@ -78,3 +78,11 @@ jobs:
           name: ubuntu-24.04-amd64-deb
           path: desktop/src-tauri/target/release/bundle/deb/*.deb
           if-no-files-found: error
+      - name: Verify the installed Ubuntu package in a clean system
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm \
+            -v "$PWD/desktop/src-tauri/target/release/bundle/deb:/packages:ro" \
+            -v "$PWD/desktop/scripts/verify_ubuntu_deb.sh:/verify_ubuntu_deb.sh:ro" \
+            ubuntu:24.04@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5 \
+            bash /verify_ubuntu_deb.sh /packages
