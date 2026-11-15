@@ -47,6 +47,42 @@ button:focus-visible, input:focus-visible, [tabindex="-1"]:focus-visible {
   color-scheme: dark;
 }
 
+.desktop-app {
+  --canvas: #f6f5fa;
+  --surface: #fff;
+  --text: #211e34;
+  --muted: #635d75;
+  --line: #e5e1ee;
+  --accent: #5842ca;
+  --accent-hover: #4934af;
+  --accent-text: #fff;
+  --soft: #efebfc;
+  --focus: #6047d7;
+}
+
+.desktop-app[data-theme="dark"] {
+  --canvas: #181626;
+  --surface: #211e31;
+  --text: #f5f2ff;
+  --muted: #bcb6d0;
+  --line: #3c3651;
+  --accent: #b6a5ff;
+  --accent-hover: #cbbfff;
+  --accent-text: #21163c;
+  --soft: #363052;
+  --focus: #c1adff;
+  --error-bg: #432735;
+  --error-text: #ffc3d2;
+}
+
+.desktop-app button:disabled,
+.desktop-app button[aria-disabled="true"] { cursor: default; opacity: .58; }
+
+.desktop-app textarea:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
 button { color: inherit; }
 h1, h2, p { margin: 0; }
 h1, h2 { letter-spacing: -.035em; line-height: 1.15; }

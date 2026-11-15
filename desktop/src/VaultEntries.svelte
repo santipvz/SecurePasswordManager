@@ -1,21 +1,25 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core"
-  import { ArrowLeft, ChevronDown, ChevronRight, Copy, Eye, EyeOff, Pencil, Plus, Search, ShieldCheck, Trash2 } from "@lucide/svelte"
+  import { ArrowLeft, ChevronDown, Copy, Eye, EyeOff, KeyRound, Pencil, Plus, Search, Trash2, X } from "@lucide/svelte"
   import { onMount, tick } from "svelte"
   import PasswordGenerator from "./PasswordGenerator.svelte"
   import PasswordReview, { type Review } from "./PasswordReview.svelte"
 
   type Entry = { name: string; username: string; url: string }
 
-  let { generation, entries = $bindable(), writing = $bindable(), onSessionEnd }: {
+  let { generation, entries = $bindable(), writing = $bindable(), editing = $bindable(false),
+    reviewOpen = $bindable(false), onSessionEnd }: {
     generation: number
     entries: Entry[]
     writing: boolean
+    editing: boolean
+    reviewOpen: boolean
     onSessionEnd: (message: string) => Promise<void>
   } = $props()
 
   const pageSize = 100
   const revealLifetime = 10_000
+  const searchShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "Ctrl K"
   const messages: Record<string, string> = {
     busy: "The vault is busy. Try again.",
     entry_missing: "This credential no longer exists.",
@@ -30,11 +34,9 @@
   }
 
   let generatorOpen = $state(false)
-  let reviewOpen = $state(false)
   let reviewPending = $state(false)
   let review = $state<Review>()
   let reviewError = $state("")
-  let reviewButton = $state<HTMLButtonElement>()
   let search = $state("")
   let limit = $state(pageSize)
   let selected = $state<Entry>()
@@ -48,7 +50,10 @@
   let notesEdited = false
   let feedback = $state("")
   let error = $state("")
+  let listFeedback = $state("")
+  let listError = $state("")
   let searchInput = $state<HTMLInputElement>()
+  let entryList = $state<HTMLUListElement>()
   let nameInput = $state<HTMLInputElement>()
   let passwordInput = $state<HTMLInputElement>()
   let generatorToggle = $state<HTMLButtonElement>()
@@ -78,6 +83,7 @@
     hidePassword()
     if (passwordInput) passwordInput.value = ""
     editor = undefined
+    editing = false
     generatorOpen = false
     reviewOpen = false
     review = undefined
@@ -86,6 +92,8 @@
     notes = undefined
     feedback = ""
     error = ""
+    listFeedback = ""
+    listError = ""
   }
 
   async function focusSearch() {
@@ -108,6 +116,30 @@
     selected = undefined
     search = event.currentTarget.value
     limit = pageSize
+  }
+
+  async function clearSearch() {
+    search = ""
+    limit = pageSize
+    await focusSearch()
+  }
+
+  function searchKeys(event: KeyboardEvent) {
+    if (event.isComposing || busy || editor || reviewPending || !["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) return
+    const rows = [...(entryList?.querySelectorAll<HTMLButtonElement>("[data-entry]") ?? [])]
+    const current = rows.indexOf(event.currentTarget as HTMLButtonElement)
+    if (event.key === "Enter" && current === -1 && rows[0]) {
+      event.preventDefault()
+      rows[0].click()
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault()
+      if (event.key === "ArrowUp" && current <= 0) searchInput?.focus()
+      else rows[current + (event.key === "ArrowDown" ? 1 : -1)]?.focus()
+    }
+  }
+
+  function entryTint(name: string) {
+    return (name.codePointAt(0) ?? 0) % 4
   }
 
   function endsSession(reason: unknown) {
@@ -145,7 +177,7 @@
     }
   }
 
-  async function runReview() {
+  export async function openReview() {
     if (busy || editor || reviewPending) return
     clearView()
     selected = undefined
@@ -167,10 +199,10 @@
     }
   }
 
-  async function closeReview() {
+  export async function closeReview() {
     clearView()
     await tick()
-    reviewButton?.focus()
+    searchInput?.focus()
   }
 
   function selectFinding(name: string) {
@@ -221,17 +253,27 @@
     }
   }
 
-  async function copyPassword() {
-    if (busy || !selected) return
+  async function copyPassword(entry: Entry, fromList = false) {
+    if (busy || editor || reviewPending || confirmation) return
+    hidePassword()
     const current = viewRevision
     feedback = ""
     error = ""
+    listFeedback = ""
+    listError = ""
     busy = true
     try {
-      await invoke("vault_copy", { generation, name: selected.name })
-      if (current === viewRevision) feedback = "Password copied for 30 seconds."
+      await invoke("vault_copy", { generation, name: entry.name })
+      if (current !== viewRevision) return
+      if (fromList) listFeedback = "Password copied for 30 seconds."
+      else feedback = "Password copied for 30 seconds."
     } catch (reason) {
-      if (current === viewRevision) handleError(reason)
+      if (current !== viewRevision) return
+      handleError(reason)
+      if (fromList) {
+        listError = error
+        error = ""
+      }
     } finally {
       busy = false
     }
@@ -247,6 +289,7 @@
     reviewOpen = false
     review = undefined
     editor = mode
+    editing = true
     notesEdited = false
     if (mode === "add") {
       selected = undefined
@@ -259,6 +302,7 @@
   async function closeEditor() {
     if (passwordInput) passwordInput.value = ""
     editor = undefined
+    editing = false
     generatorOpen = false
     viewRevision++
     error = ""
@@ -306,6 +350,7 @@
       search = ""
       limit = pageSize
       editor = undefined
+      editing = false
       generatorOpen = false
       selected = saved
       notes = updatedNotes
@@ -383,37 +428,46 @@
 <svelte:window onkeydown={shortcuts} onblur={hidePassword} onpagehide={hidePassword} />
 <svelte:document onvisibilitychange={hidePassword} />
 
-<main class="credential-workspace" class:detail-open={selected || editor || reviewOpen}>
+<main class="credential-workspace" class:detail-open={selected || editor || reviewOpen} class:review-view={reviewOpen}>
   <section class="collection" aria-labelledby="entry-list-heading">
     <div class="collection-heading entry-heading">
       <div>
-        <h1 id="entry-list-heading">Vault entries</h1>
-        <p class="muted" aria-live="polite">{matches.length} {matches.length === 1 ? "entry" : "entries"}</p>
+        <h1 id="entry-list-heading">Credentials</h1>
+        <p class="muted" aria-live="polite">{matches.length} {matches.length === 1 ? "credential" : "credentials"}</p>
       </div>
-      <button class="primary" disabled={busy || conflict || reviewPending} onclick={() => openEditor("add")}><Plus size={17} /> Add entry</button>
+      <button class="primary" disabled={busy || conflict || reviewPending || Boolean(editor)} onclick={() => openEditor("add")}><Plus size={17} /> Add entry</button>
     </div>
-    <label class="search-box">
+    <div class="search-box">
       <Search size={17} />
-      <input type="search" bind:this={searchInput} value={search} oninput={updateSearch}
-        readonly={Boolean(editor) || busy || reviewPending} aria-label="Search vault entries" placeholder="Search entries" />
-    </label>
-    <button class="text-button review-action" bind:this={reviewButton} disabled={busy || Boolean(editor) || reviewPending}
-      onclick={runReview}><ShieldCheck size={17} /> Review passwords</button>
+      <input type="search" bind:this={searchInput} value={search} oninput={updateSearch} onkeydown={searchKeys}
+        readonly={Boolean(editor) || busy || reviewPending} aria-label="Search vault entries" placeholder="Search your vault" />
+      {#if search}
+        <button class="icon-button clear-search" aria-label="Clear search" title="Clear search"
+          disabled={Boolean(editor) || busy || reviewPending} onclick={clearSearch}><X size={16} /></button>
+      {:else}
+        <kbd>{searchShortcut}</kbd>
+      {/if}
+    </div>
     {#if !selected && !editor && feedback}<p class="feedback" role="status">{feedback}</p>{/if}
     {#if conflict && !selected && !editor}<p class="error-note" role="alert">{messages.write_conflict}</p>{/if}
+    {#if listFeedback}<p class="list-status feedback" role="status">{listFeedback}</p>{/if}
+    {#if listError}<p class="error-note" role="alert">{listError}</p>{/if}
     {#if matches.length}
-      <ul class="entries">
+      <ul class="entries credential-list" bind:this={entryList}>
         {#each matches.slice(0, limit) as { entry } (entry.name)}
-          <li>
-            <button class:chosen={selected?.name === entry.name} aria-pressed={selected?.name === entry.name}
+          <li class:active-row={selected?.name === entry.name}>
+            <button class="credential-row" data-entry aria-pressed={selected?.name === entry.name}
               aria-disabled={Boolean(editor) || busy || reviewPending}
-              onclick={(event) => { if (!editor && !busy && !reviewPending) void showDetails(entry, event.currentTarget) }}>
-              <span class="entry-mark">{entry.name.slice(0, 1).toUpperCase()}</span>
+              onkeydown={searchKeys}
+              onclick={(event) => { if (!editor && !busy && !reviewPending) void showDetails(entry, event.currentTarget, event.detail === 0) }}>
+              <span class="entry-mark" data-color={entryTint(entry.name)} aria-hidden="true">{Array.from(entry.name)[0]?.toUpperCase()}</span>
               <span class="entry-text">
                 <strong>{entry.name}</strong>
                 {#if entry.username || entry.url}<span>{entry.username || entry.url}</span>{/if}
               </span>
-              <ChevronRight size={16} class="entry-arrow" />
+            </button>
+            <button class="icon-button row-copy" aria-label={`Copy password for ${entry.name}`} title="Copy password"
+              aria-disabled={busy || Boolean(editor) || reviewPending || confirmation} onclick={() => copyPassword(entry, true)}><Copy size={16} />
             </button>
           </li>
         {/each}
@@ -422,7 +476,12 @@
         <button class="secondary more" onclick={() => limit += pageSize}>Show more <ChevronDown size={16} /></button>
       {/if}
     {:else}
-      <p class="empty">{entries.length ? "No matching entries." : "This vault has no entries."}</p>
+      <div class="list-empty">
+        <Search size={24} aria-hidden="true" />
+        <h2>{entries.length ? "No matches" : "No credentials yet"}</h2>
+        <p class="muted">{entries.length ? "Try a different name, username, or website." : "Add your first credential to this vault."}</p>
+        {#if search}<button class="secondary" onclick={clearSearch}>Clear search</button>{/if}
+      </div>
     {/if}
   </section>
 
@@ -431,6 +490,7 @@
       <PasswordReview result={review} pending={reviewPending} error={reviewError}
         onClose={closeReview} onEntry={selectFinding} />
     {:else if editor}
+      <button class="text-button detail-back" disabled={busy} onclick={closeEditor}><ArrowLeft size={16} /> Cancel and go back</button>
       <h2>{editor === "add" ? "Add credential" : "Edit credential"}</h2>
       <form class="credential-form" onsubmit={saveEntry} autocomplete="off">
         <label>Name <input name="name" value={selected?.name ?? ""} bind:this={nameInput} required /></label>
@@ -454,21 +514,28 @@
     {:else if selected}
       <button class="text-button detail-back" disabled={busy} onclick={closeDetails}><ArrowLeft size={16} /> Back to entries</button>
       <div class="detail-heading">
-        <h2 tabindex="-1" bind:this={detailHeading}>{selected.name}</h2>
+        <span class="entry-mark large" data-color={entryTint(selected.name)} aria-hidden="true">{Array.from(selected.name)[0]?.toUpperCase()}</span>
+        <div>
+          <h2 tabindex="-1" bind:this={detailHeading}>{selected.name}</h2>
+          {#if selected.url}<p class="muted detail-url">{selected.url}</p>{/if}
+        </div>
+        {#if !confirmation}
+          <button class="secondary edit-action" disabled={busy || conflict || notes === undefined} onclick={() => openEditor("edit")}><Pencil size={15} /> Edit</button>
+        {/if}
       </div>
       <dl>
         {#if selected.username}<div><dt>Username</dt><dd>{selected.username}</dd></div>{/if}
-        {#if selected.url}<div><dt>Website</dt><dd>{selected.url}</dd></div>{/if}
         <div>
           <dt>Password</dt>
           <dd class="password-row">
             <span class="password-text" aria-label={revealed === undefined ? "Password hidden" : undefined}>{revealed ?? "••••••••••"}</span>
             <div class="detail-actions">
-              <button class="icon-button" aria-label={revealed === undefined ? "Reveal password" : "Hide password"}
+              <button class="icon-button" title={revealed === undefined ? "Reveal password" : "Hide password"} aria-label={revealed === undefined ? "Reveal password" : "Hide password"}
                 disabled={busy || confirmation} onclick={revealPassword}>
                 {#if revealed === undefined}<Eye size={18} />{:else}<EyeOff size={18} />{/if}
               </button>
-              <button class="icon-button" aria-label="Copy password" disabled={busy || confirmation} onclick={copyPassword}><Copy size={17} /></button>
+              <button class="primary copy-detail" aria-label="Copy password" disabled={busy || confirmation}
+                onclick={() => { if (selected) void copyPassword(selected) }}><Copy size={16} /> <span>Copy</span></button>
             </div>
           </dd>
         </div>
@@ -484,12 +551,15 @@
         </div>
       {:else}
         <div class="detail-actions">
-          <button class="secondary" disabled={busy || conflict || notes === undefined} onclick={() => openEditor("edit")}><Pencil size={15} /> Edit</button>
-          <button class="text-button delete-link" disabled={busy || conflict} onclick={askDelete}><Trash2 size={16} /> Delete</button>
+          <button class="text-button delete-link" disabled={busy || conflict} onclick={askDelete}><Trash2 size={16} /> Delete credential</button>
         </div>
       {/if}
     {:else}
-      <p class="detail-empty">Select a credential to view its details.</p>
+      <div class="detail-empty">
+        <span class="detail-empty-icon"><KeyRound size={29} strokeWidth={1.5} /></span>
+        <h2>Select a credential</h2>
+        <p>Choose an entry to view or edit its details.</p>
+      </div>
     {/if}
     {#if error || (conflict && (selected || editor))}
       <p class="error-note entry-feedback" role="alert">{error || messages.write_conflict}</p>
@@ -501,19 +571,83 @@
 <style>
   .credential-workspace {
     display: grid;
-    grid-template-columns: minmax(300px, .9fr) minmax(320px, 1fr);
-    min-height: calc(100vh - 68px);
+    grid-template-columns: minmax(280px, .81fr) minmax(310px, 1fr);
+    min-height: calc(100vh - 64px);
   }
-  .entry-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-  .entry-heading .primary { flex: none; }
-  .review-action { margin-bottom: 8px; }
+  .collection, .detail { padding: 31px clamp(17px, 2.8vw, 38px); }
+  .collection { background: var(--canvas); }
+  .collection h1 { font-size: clamp(26px, 3vw, 35px); }
+  .collection-heading p { margin-top: 6px; }
+  .entry-heading { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+  .entry-heading .primary { flex: none; min-height: 38px; padding: 7px 12px; }
+  .search-box { min-height: 44px; margin: 22px 0 16px; border-radius: 10px; }
+  .search-box input::-webkit-search-cancel-button { display: none; }
+  .clear-search { width: 30px; height: 30px; margin-right: -4px; }
+  .credential-list {
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: var(--surface);
+  }
+  .credential-list li {
+    display: flex; align-items: center; gap: 2px; border: 1px solid transparent;
+    border-radius: 9px;
+  }
+  .credential-list li + li { margin-top: 1px; }
+  .credential-list li:hover { background: var(--canvas); }
+  .credential-list li.active-row { background: var(--soft); border-color: var(--line); }
+  .credential-list .credential-row { flex: 1; min-width: 0; min-height: 62px; background: transparent; }
+  .credential-list .row-copy {
+    flex: none; width: 35px; min-height: 35px; height: 35px; margin-right: 6px;
+    padding: 0; justify-content: center; color: var(--muted);
+  }
+  .credential-list .row-copy:hover { background: var(--soft); color: var(--accent); }
+  .entry-mark { color: #50369f; background: #eee8ff; }
+  .entry-mark[data-color="1"] { color: #185474; background: #dff1ff; }
+  .entry-mark[data-color="2"] { color: #20604b; background: #dbf1e8; }
+  .entry-mark[data-color="3"] { color: #844724; background: #f9e8dc; }
+  .entry-text strong { font-weight: 600; }
+  .entry-text span { font-size: 12px; }
+  .list-status { margin: 0 0 10px; color: var(--accent); }
+  .list-empty {
+    display: grid; gap: 10px; justify-items: center; padding: 37px 14px;
+    text-align: center; border: 1px dashed var(--line); border-radius: 13px;
+  }
+  .list-empty > :global(svg) { color: var(--accent); }
+  .list-empty h2 { font-size: 19px; }
+  .detail-heading { gap: 14px; }
+  .detail-heading > div { min-width: 0; }
+  .detail-heading h2 { font-size: clamp(22px, 3vw, 34px); }
+  .detail-heading .detail-url { margin-top: 5px; font-size: 13px; overflow-wrap: anywhere; }
+  .edit-action { margin-left: auto; min-height: 36px; flex: none; }
+  .detail dl { display: grid; gap: 13px; margin: 28px 0 16px; }
+  .detail dl > div {
+    min-width: 0; padding: 13px 14px; border: 1px solid var(--line);
+    background: var(--canvas); border-radius: 10px;
+  }
+  .detail dl dt { margin-bottom: 4px; font-weight: 600; }
+  .detail-empty {
+    display: grid; justify-items: center; gap: 9px; text-align: center;
+    padding: 0; margin: clamp(70px, 16vh, 165px) auto 0;
+  }
+  .detail-empty-icon {
+    display: grid; place-items: center; width: 60px; height: 60px; margin-bottom: 8px;
+    background: var(--soft); color: var(--accent); border-radius: 17px;
+  }
+  .detail-empty h2 { font-size: 22px; color: var(--text); }
+  .copy-detail { min-height: 35px; padding: 6px 10px; }
+  .review-view { display: block; }
+  .review-view .collection { display: none; }
+  .review-view .detail {
+    max-width: 730px; margin-inline: auto; border: 0; background: transparent;
+  }
   .generator-toggle { justify-self: start; }
   .credential-form { display: grid; gap: 13px; margin-top: 20px; }
   .credential-form label { display: grid; gap: 5px; font-weight: 600; }
   .credential-form small { color: var(--muted); font-weight: 400; }
   .credential-form input, .credential-form textarea {
     width: 100%; min-width: 0; font: inherit; font-weight: 400; color: var(--text);
-    background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px;
+    background: var(--canvas); border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px;
   }
   .credential-form textarea { resize: vertical; }
   .password-text, .notes { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -521,12 +655,12 @@
   .detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .password-row .detail-actions { flex-wrap: nowrap; flex: none; }
   .more, .entry-feedback { margin-top: 13px; }
-  .entry-feedback { position: sticky; bottom: 12px; }
   .delete-confirmation { display: grid; gap: 10px; }
   .delete-link { color: var(--error-text); }
   .danger { color: var(--error-text); background: var(--error-bg); border: 1px solid transparent; border-radius: 10px; padding: 9px 14px; min-height: 43px; }
-  button:disabled { cursor: default; opacity: .65; }
   @media (max-width: 760px) {
-    .credential-workspace { grid-template-columns: minmax(0, 1fr); }
+    .credential-workspace { grid-template-columns: minmax(0, 1fr); min-height: calc(100vh - 108px); }
+    .collection, .detail { padding-block: 22px; }
+    .detail-heading .entry-mark.large { width: 44px; height: 44px; font-size: 17px; }
   }
 </style>
