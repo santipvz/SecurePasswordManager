@@ -1,9 +1,10 @@
 <script lang="ts">
   import { tick } from "svelte"
+  import BrandMark from "./BrandMark.svelte"
   import {
     ArrowLeft, ArrowRight, BriefcaseBusiness, Check, ChevronRight, CodeXml,
     Copy, Eye, EyeOff, FolderOpen, KeyRound, LayoutGrid, LockKeyhole, Moon,
-    Plus, Search, ShieldCheck, Sun, UserRound, Wallet,
+    Plus, Search, Sun, UserRound, Wallet,
   } from "@lucide/svelte"
   import { categories, credentials, type Category } from "./demo"
 
@@ -109,7 +110,7 @@
 
 <div class="app" data-theme={theme}>
   <header class="topbar">
-    <div class="brand"><span class="brand-icon"><ShieldCheck size={20} /></span> Secure Password Manager</div>
+    <div class="brand" translate="no"><BrandMark size={34} /> Secure Password Manager</div>
     <div class="top-actions">
       <span class="sample-label">Demo vault</span>
       <button class="icon-button" aria-label={theme === "light" ? "Use dark theme" : "Use light theme"}
