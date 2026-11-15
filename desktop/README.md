@@ -1,5 +1,19 @@
 # Desktop app
 
+## Install on Ubuntu
+
+The Ubuntu preview targets Ubuntu 24.04 LTS on amd64. Download the `ubuntu-24.04-amd64-deb` artifact from a successful Desktop workflow and extract the archive. Run this command from the directory containing the package.
+
+```sh
+sudo apt install ./*.deb
+```
+
+Open **Secure Password Manager** from the applications menu as your normal user. The package includes the vault process and its Python runtime. Use `sudo apt remove secure-password-manager` to uninstall. Ubuntu's package manager leaves vaults and backups in your home directory during upgrades and removal. The default vault lives at `${XDG_DATA_HOME:-$HOME/.local/share}/SecurePasswordManager/vault.spm`.
+
+Use a USB YubiKey that supports FIDO2 and the `hmac-secret` extension. Ubuntu's udev and logind grant device access to the active local desktop user for recognized FIDO keys. If the app cannot see the key, reconnect it in the active desktop session and check its USB access using [Yubico's Linux device permissions guide](https://developers.yubico.com/yubikey-manager/Device_Permissions.html). Run the app under your desktop account.
+
+## Use the vault
+
 The native app checks the default vault and can open another `.spm` file or create a new one through the system file dialog. Creating a vault requires a master password of at least 15 characters. An existing file is preserved if you select its name while creating a vault.
 
 If the selected vault has a registered YubiKey, choose **Unlock with YubiKey**. On Windows, follow the system security prompt. On Linux and macOS, enter the FIDO2 PIN if your key requires one and touch the key when it blinks. You can cancel the attempt or switch back to the master password.
@@ -18,6 +32,8 @@ Use **Vault settings** to register or remove a YubiKey with the current master p
 
 Choose **Lock vault** to end the session immediately. The app also locks after five minutes without keyboard or pointer input.
 
+## Develop
+
 Install Python 3.11 or later, Node.js 22.12 or later in the 22 series, a stable Rust toolchain, and the native packages listed in the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/). Install the version of uv used by CI and run these commands from the repository root.
 
 ```sh
@@ -32,3 +48,17 @@ npm run tauri dev
 On Debian with system Python 3.11, install `libpython3.11` for PyInstaller. Rebuild the vault process after changing the Python core. See [CI checks](../CI.md) for the current uv version and performance commands.
 
 From this directory, run `npm run dev` and open `http://127.0.0.1:1420` to review the browser demo with fictional credentials. `npm run check` checks Svelte and TypeScript, and `npm run build` bundles the local frontend assets. Run `cargo test --locked --features custom-protocol --manifest-path src-tauri/Cargo.toml` after building both the vault process and frontend to test the bridge.
+
+## Reproduce the Ubuntu package
+
+On Ubuntu 24.04 amd64, install the build prerequisites and run the locked setup through the vault bundling command above. Then run these commands from the repository root.
+
+```sh
+npm ci --prefix desktop
+npm run build --prefix desktop
+cargo build --release --locked --features custom-protocol --manifest-path desktop/src-tauri/Cargo.toml
+npm --prefix desktop run tauri -- bundle --config src-tauri/tauri.ubuntu.conf.json \
+  --features custom-protocol --bundles deb --ci --no-sign
+```
+
+The unsigned test package is in `desktop/src-tauri/target/release/bundle/deb/`. The Desktop workflow installs it in a clean Ubuntu 24.04 container, opens its application menu entry as a standard user, and checks that an upgrade and purge preserve the synthetic vault and its encrypted backup. Test a physical YubiKey in a local Ubuntu desktop session with a disposable vault by registering the key, locking, and unlocking again with the key.

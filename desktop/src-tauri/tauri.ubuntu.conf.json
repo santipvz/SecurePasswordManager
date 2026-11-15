@@ -1,0 +1,14 @@
+{
+  "bundle": {
+    "active": true,
+    "category": "Utility",
+    "shortDescription": "Local password manager",
+    "longDescription": "Create passwords and manage encrypted vaults on your computer.",
+    "linux": {
+      "deb": {
+        "section": "utils",
+        "depends": ["libc6 (>= 2.39)", "xdg-desktop-portal-gtk"]
+      }
+    }
+  }
+}
