@@ -53,8 +53,6 @@
   let settingsPending = $state(false)
   let entryWritePending = $state(false)
   let editing = $state(false)
-  let generatorNav = $state<HTMLButtonElement>()
-  let settingsNav = $state<HTMLButtonElement>()
   let hasSecurityKey = $state(false)
   let phase = $state<Phase>("loading")
   let theme = $state<"light" | "dark">("light")
@@ -223,17 +221,12 @@
 
   async function navigate(next: View) {
     if (phase !== "unlocked" || navigationBusy) return
-    const previous = view
     if (next !== "credentials") reviewing = false
     view = next
     await tick()
     if (phase !== "unlocked" || view !== next) return
     if (next === "credentials" && reviewing) await workspace?.closeReview()
     if (next === "generator") generatorHeading?.focus()
-    if (next === "credentials" && previous !== next) {
-      if (previous === "settings") settingsNav?.focus()
-      else generatorNav?.focus()
-    }
   }
 
   async function showReview() {
@@ -256,8 +249,13 @@
       if (!creating) void endSession("")
       return
     }
-    if (event.isTrusted && event instanceof KeyboardEvent && phase === "unlocked" && view === "generator") {
-      if (event.key === "Escape") void navigate("credentials")
+    if (event.isTrusted && event instanceof KeyboardEvent && phase === "unlocked" && view !== "credentials") {
+      if (!event.isComposing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        void navigate("credentials")
+      } else if (event.key === "Escape" && view === "generator") {
+        void navigate("credentials")
+      }
     }
     if (!event.isTrusted || generation === undefined || performance.now() - lastActivity < 250) return
     lastActivity = performance.now()
@@ -311,9 +309,9 @@
           <button aria-label="Password review" title="Password review" aria-current={reviewing ? "page" : undefined}
             disabled={navigationBusy} onclick={showReview}><ShieldCheck size={19} /> <span>Password review</span></button>
           <button aria-label="Password generator" title="Password generator" aria-current={view === "generator" ? "page" : undefined}
-            disabled={navigationBusy} bind:this={generatorNav} onclick={() => navigate("generator")}><Sparkles size={19} /> <span>Password generator</span></button>
+            disabled={navigationBusy} onclick={() => navigate("generator")}><Sparkles size={19} /> <span>Password generator</span></button>
           <button aria-label="Vault settings" title="Vault settings" aria-current={view === "settings" ? "page" : undefined}
-            disabled={navigationBusy} bind:this={settingsNav} onclick={() => navigate("settings")}><Settings size={19} /> <span>Vault settings</span></button>
+            disabled={navigationBusy} onclick={() => navigate("settings")}><Settings size={19} /> <span>Vault settings</span></button>
         </nav>
         <button class="rail-lock" aria-label="Lock vault" title="Lock vault" onclick={() => endSession("")}><LockKeyhole size={18} /> <span>Lock vault</span></button>
       </aside>
@@ -323,14 +321,18 @@
           {@render themeControl()}
         </header>
         {#if view === "settings"}
-          <VaultSettings {generation} nativePrompt={Boolean(status?.native_key_prompt)} bind:hasSecurityKey bind:pending={settingsPending}
-            onClose={() => navigate("credentials")} onLock={endSession} onImport={addImported} />
+          <div class="vault-page">
+            <VaultSettings {generation} nativePrompt={Boolean(status?.native_key_prompt)} bind:hasSecurityKey bind:pending={settingsPending}
+              onClose={() => navigate("credentials")} onLock={endSession} onImport={addImported} />
+          </div>
         {:else if view === "generator"}
-          <main class="tool-page">
-            <button class="text-button back-link" onclick={() => navigate("credentials")}><ArrowLeft size={16} /> Back to credentials</button>
-            <h1 tabindex="-1" bind:this={generatorHeading}>Password generator</h1>
-            <PasswordGenerator {generation} />
-          </main>
+          <div class="vault-page">
+            <main class="tool-page">
+              <button class="text-button back-link" onclick={() => navigate("credentials")}><ArrowLeft size={16} /> Back to credentials</button>
+              <h1 tabindex="-1" bind:this={generatorHeading}>Password generator</h1>
+              <PasswordGenerator {generation} />
+            </main>
+          </div>
         {:else}
           <VaultEntries {generation} bind:this={workspace} bind:entries bind:writing={entryWritePending}
             bind:editing bind:reviewOpen={reviewing} onSessionEnd={endSession} />
@@ -476,9 +478,10 @@
   .vault-rail button:focus-visible { outline-color: #c1b4ff; }
   .vault-rail button :global(svg) { flex: none; }
   .vault-rail .rail-lock { margin-top: auto; border-color: #48425e; color: #eeeafd; }
-  .vault-content { min-width: 0; }
+  .vault-content { display: flex; flex-direction: column; min-width: 0; height: 100vh; }
   .vault-toolbar, .welcome-header { display: flex; justify-content: space-between; align-items: center; }
-  .vault-toolbar { height: 64px; padding: 0 26px; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .vault-toolbar { flex: none; height: 64px; padding: 0 26px; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .vault-page { flex: 1; min-height: 0; overflow-y: auto; }
   .vault-location {
     display: flex; align-items: center; gap: 8px; min-width: 0; margin-right: 12px;
     font-weight: 600; color: var(--muted);
@@ -578,6 +581,8 @@
     .vault-rail button { width: 40px; min-height: 40px; }
     .vault-rail .rail-lock { margin-top: 0; }
     .vault-toolbar { height: 50px; padding-inline: 16px; }
+    .vault-content { height: auto; }
+    .vault-page { overflow: visible; }
     .theme-control { width: 34px; height: 34px; }
     .desktop-welcome { grid-template-columns: minmax(0, 1fr); }
     .vault-art { display: none; }

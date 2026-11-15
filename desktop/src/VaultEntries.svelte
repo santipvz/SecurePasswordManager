@@ -43,6 +43,7 @@
   let notes = $state<string>()
   let revealed = $state<string>()
   let revealTimer: ReturnType<typeof setTimeout> | undefined
+  let copyFeedbackTimer: ReturnType<typeof setTimeout> | undefined
   let editor = $state<"add" | "edit">()
   let confirmation = $state(false)
   let busy = $state(false)
@@ -54,6 +55,8 @@
   let listError = $state("")
   let searchInput = $state<HTMLInputElement>()
   let entryList = $state<HTMLUListElement>()
+  let listScroll = $state<HTMLDivElement>()
+  let detailPane = $state<HTMLElement>()
   let nameInput = $state<HTMLInputElement>()
   let passwordInput = $state<HTMLInputElement>()
   let generatorToggle = $state<HTMLButtonElement>()
@@ -81,6 +84,7 @@
   function clearView() {
     viewRevision++
     hidePassword()
+    clearTimeout(copyFeedbackTimer)
     if (passwordInput) passwordInput.value = ""
     editor = undefined
     editing = false
@@ -116,11 +120,13 @@
     selected = undefined
     search = event.currentTarget.value
     limit = pageSize
+    listScroll?.scrollTo(0, 0)
   }
 
   async function clearSearch() {
     search = ""
     limit = pageSize
+    listScroll?.scrollTo(0, 0)
     await focusSearch()
   }
 
@@ -166,6 +172,7 @@
     busy = true
     await tick()
     if (current !== viewRevision) return
+    detailPane?.scrollTo(0, 0)
     if (focusDetail || matchMedia("(max-width: 760px)").matches) detailHeading?.focus()
     try {
       const result = await invoke<string>("vault_entry_notes", { generation, name: entry.name })
@@ -256,6 +263,7 @@
   async function copyPassword(entry: Entry, fromList = false) {
     if (busy || editor || reviewPending || confirmation) return
     hidePassword()
+    clearTimeout(copyFeedbackTimer)
     const current = viewRevision
     feedback = ""
     error = ""
@@ -265,8 +273,12 @@
     try {
       await invoke("vault_copy", { generation, name: entry.name })
       if (current !== viewRevision) return
-      if (fromList) listFeedback = "Password copied for 30 seconds."
-      else feedback = "Password copied for 30 seconds."
+      if (fromList) {
+        listFeedback = "Password copied for 30 seconds."
+        copyFeedbackTimer = setTimeout(() => { listFeedback = "" }, 4500)
+      } else {
+        feedback = "Password copied for 30 seconds."
+      }
     } catch (reason) {
       if (current !== viewRevision) return
       handleError(reason)
@@ -403,6 +415,7 @@
   }
 
   function shortcuts(event: KeyboardEvent) {
+    if (event.isComposing) return
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
       event.preventDefault()
       if (!editor && !busy) void focusSearch()
@@ -414,6 +427,10 @@
     else if (!busy && editor) void closeEditor()
     else if (!busy && confirmation) void keepEntry()
     else if (!busy && selected) void closeDetails()
+    else if (!busy && search && event.target === searchInput) {
+      event.preventDefault()
+      void clearSearch()
+    }
   }
 
   onMount(() => {
@@ -452,40 +469,42 @@
     {#if conflict && !selected && !editor}<p class="error-note" role="alert">{messages.write_conflict}</p>{/if}
     {#if listFeedback}<p class="list-status feedback" role="status">{listFeedback}</p>{/if}
     {#if listError}<p class="error-note" role="alert">{listError}</p>{/if}
-    {#if matches.length}
-      <ul class="entries credential-list" bind:this={entryList}>
-        {#each matches.slice(0, limit) as { entry } (entry.name)}
-          <li class:active-row={selected?.name === entry.name}>
-            <button class="credential-row" data-entry aria-pressed={selected?.name === entry.name}
-              aria-disabled={Boolean(editor) || busy || reviewPending}
-              onkeydown={searchKeys}
-              onclick={(event) => { if (!editor && !busy && !reviewPending) void showDetails(entry, event.currentTarget, event.detail === 0) }}>
-              <span class="entry-mark" data-color={entryTint(entry.name)} aria-hidden="true">{Array.from(entry.name)[0]?.toUpperCase()}</span>
-              <span class="entry-text">
-                <strong>{entry.name}</strong>
-                {#if entry.username || entry.url}<span>{entry.username || entry.url}</span>{/if}
-              </span>
-            </button>
-            <button class="icon-button row-copy" aria-label={`Copy password for ${entry.name}`} title="Copy password"
-              aria-disabled={busy || Boolean(editor) || reviewPending || confirmation} onclick={() => copyPassword(entry, true)}><Copy size={16} />
-            </button>
-          </li>
-        {/each}
-      </ul>
-      {#if matches.length > limit}
-        <button class="secondary more" onclick={() => limit += pageSize}>Show more <ChevronDown size={16} /></button>
+    <div class="collection-scroll" bind:this={listScroll}>
+      {#if matches.length}
+        <ul class="entries credential-list" bind:this={entryList}>
+          {#each matches.slice(0, limit) as { entry } (entry.name)}
+            <li class:active-row={selected?.name === entry.name}>
+              <button class="credential-row" data-entry aria-pressed={selected?.name === entry.name}
+                aria-disabled={Boolean(editor) || busy || reviewPending}
+                onkeydown={searchKeys}
+                onclick={(event) => { if (!editor && !busy && !reviewPending) void showDetails(entry, event.currentTarget, event.detail === 0) }}>
+                <span class="entry-mark" data-color={entryTint(entry.name)} aria-hidden="true">{Array.from(entry.name)[0]?.toUpperCase()}</span>
+                <span class="entry-text">
+                  <strong>{entry.name}</strong>
+                  {#if entry.username || entry.url}<span>{entry.username || entry.url}</span>{/if}
+                </span>
+              </button>
+              <button class="icon-button row-copy" aria-label={`Copy password for ${entry.name}`} title="Copy password"
+                aria-disabled={busy || Boolean(editor) || reviewPending || confirmation} onclick={() => copyPassword(entry, true)}><Copy size={16} />
+              </button>
+            </li>
+          {/each}
+        </ul>
+        {#if matches.length > limit}
+          <button class="secondary more" onclick={() => limit += pageSize}>Show more <ChevronDown size={16} /></button>
+        {/if}
+      {:else}
+        <div class="list-empty">
+          <Search size={24} aria-hidden="true" />
+          <h2>{entries.length ? "No matches" : "No credentials yet"}</h2>
+          <p class="muted">{entries.length ? "Try a different name, username, or website." : "Add your first credential to this vault."}</p>
+          {#if search}<button class="secondary" onclick={clearSearch}>Clear search</button>{/if}
+        </div>
       {/if}
-    {:else}
-      <div class="list-empty">
-        <Search size={24} aria-hidden="true" />
-        <h2>{entries.length ? "No matches" : "No credentials yet"}</h2>
-        <p class="muted">{entries.length ? "Try a different name, username, or website." : "Add your first credential to this vault."}</p>
-        {#if search}<button class="secondary" onclick={clearSearch}>Clear search</button>{/if}
-      </div>
-    {/if}
+    </div>
   </section>
 
-  <section class="detail" aria-label="Credential details">
+  <section class="detail" aria-label="Credential details" bind:this={detailPane}>
     {#if reviewOpen}
       <PasswordReview result={review} pending={reviewPending} error={reviewError}
         onClose={closeReview} onEntry={selectFinding} />
@@ -570,12 +589,15 @@
 
 <style>
   .credential-workspace {
+    flex: 1;
     display: grid;
     grid-template-columns: minmax(280px, .81fr) minmax(310px, 1fr);
-    min-height: calc(100vh - 64px);
+    min-height: 0;
   }
   .collection, .detail { padding: 31px clamp(17px, 2.8vw, 38px); }
-  .collection { background: var(--canvas); }
+  .collection { display: flex; flex-direction: column; min-height: 0; padding-bottom: 0; background: var(--canvas); }
+  .collection-scroll, .detail { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .collection-scroll { padding: 4px 5px 23px 4px; margin: -4px -5px 0 -4px; }
   .collection h1 { font-size: clamp(26px, 3vw, 35px); }
   .collection-heading p { margin-top: 6px; }
   .entry-heading { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
@@ -636,10 +658,10 @@
   }
   .detail-empty h2 { font-size: 22px; color: var(--text); }
   .copy-detail { min-height: 35px; padding: 6px 10px; }
-  .review-view { display: block; }
+  .review-view { display: block; overflow-y: auto; }
   .review-view .collection { display: none; }
   .review-view .detail {
-    max-width: 730px; margin-inline: auto; border: 0; background: transparent;
+    max-width: 730px; margin-inline: auto; border: 0; background: transparent; overflow: visible;
   }
   .generator-toggle { justify-self: start; }
   .credential-form { display: grid; gap: 13px; margin-top: 20px; }
@@ -661,6 +683,7 @@
   @media (max-width: 760px) {
     .credential-workspace { grid-template-columns: minmax(0, 1fr); min-height: calc(100vh - 108px); }
     .collection, .detail { padding-block: 22px; }
+    .collection-scroll, .detail, .review-view { overflow: visible; }
     .detail-heading .entry-mark.large { width: 44px; height: 44px; font-size: 17px; }
   }
 </style>
