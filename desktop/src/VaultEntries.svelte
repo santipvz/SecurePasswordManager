@@ -73,6 +73,7 @@
     const query = search.trim().toLowerCase()
     return query ? searchIndex.filter(({ fields }) => fields.some((text) => text.includes(query))) : searchIndex
   })
+  const searchUnavailable = $derived(Boolean(editor) || busy || reviewPending)
 
   function hidePassword() {
     secretRevision++
@@ -116,6 +117,7 @@
   }
 
   function updateSearch(event: Event & { currentTarget: HTMLInputElement }) {
+    if (searchUnavailable) return
     clearView()
     selected = undefined
     search = event.currentTarget.value
@@ -124,6 +126,7 @@
   }
 
   async function clearSearch() {
+    if (searchUnavailable) return
     search = ""
     limit = pageSize
     listScroll?.scrollTo(0, 0)
@@ -131,7 +134,7 @@
   }
 
   function searchKeys(event: KeyboardEvent) {
-    if (event.isComposing || busy || editor || reviewPending || !["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) return
+    if (event.isComposing || searchUnavailable || !["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) return
     const rows = [...(entryList?.querySelectorAll<HTMLButtonElement>("[data-entry]") ?? [])]
     const current = rows.indexOf(event.currentTarget as HTMLButtonElement)
     if (event.key === "Enter" && current === -1 && rows[0]) {
@@ -418,7 +421,7 @@
     if (event.isComposing) return
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
       event.preventDefault()
-      if (!editor && !busy) void focusSearch()
+      if (!searchUnavailable) void focusSearch()
     }
     if (event.key !== "Escape") return
     if (revealed !== undefined || (busy && selected && !editor)) hidePassword()
@@ -457,10 +460,10 @@
     <div class="search-box">
       <Search size={17} />
       <input type="search" bind:this={searchInput} value={search} oninput={updateSearch} onkeydown={searchKeys}
-        readonly={Boolean(editor) || busy || reviewPending} aria-label="Search vault entries" placeholder="Search your vault" />
+        readonly={searchUnavailable} aria-label="Search vault entries" placeholder="Search your vault" />
       {#if search}
         <button class="icon-button clear-search" aria-label="Clear search" title="Clear search"
-          disabled={Boolean(editor) || busy || reviewPending} onclick={clearSearch}><X size={16} /></button>
+          disabled={searchUnavailable} onclick={clearSearch}><X size={16} /></button>
       {:else}
         <kbd>{searchShortcut}</kbd>
       {/if}
@@ -498,7 +501,7 @@
           <Search size={24} aria-hidden="true" />
           <h2>{entries.length ? "No matches" : "No credentials yet"}</h2>
           <p class="muted">{entries.length ? "Try a different name, username, or website." : "Add your first credential to this vault."}</p>
-          {#if search}<button class="secondary" onclick={clearSearch}>Clear search</button>{/if}
+          {#if search}<button class="secondary" disabled={searchUnavailable} onclick={clearSearch}>Clear search</button>{/if}
         </div>
       {/if}
     </div>
