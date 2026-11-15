@@ -16,15 +16,15 @@ Use a USB YubiKey that supports FIDO2 and the `hmac-secret` extension. Ubuntu's 
 
 The native app checks the default vault and can open another `.spm` file or create a new one through the system file dialog. Creating a vault requires a master password of at least 15 characters. An existing file is preserved if you select its name while creating a vault.
 
-If the selected vault has a registered YubiKey, choose **Unlock with YubiKey**. On Windows, follow the system security prompt. On Linux and macOS, enter the FIDO2 PIN if your key requires one and touch the key when it blinks. You can cancel the attempt or switch back to the master password.
+If the selected vault has a registered YubiKey, switch to **YubiKey** on the unlock screen, then choose **Unlock with YubiKey**. On Windows, follow the system security prompt. On Linux and macOS, enter the FIDO2 PIN if your key requires one and touch the key when it blinks. You can cancel the attempt or switch back to the master password.
 
-Search an unlocked vault by name, username, or website. Select an entry to view its details, edit it, or delete it after confirmation. Leave the password field blank when editing to keep the saved password.
+Search an unlocked vault by name, username, or website. Press **Ctrl+K** or **Command+K** to focus search. Use the arrow keys to move through results and **Enter** to open one. Select an entry to view its details, edit it, or delete it after confirmation. Leave the password field blank when editing to keep the saved password.
 
-Passwords stay hidden until you reveal them. A reveal lasts 10 seconds and ends when you leave the details view or the window loses focus. Copying sends the password directly to the system clipboard through Rust. The app attempts to clear its copy after 30 seconds or when the vault locks, provided the clipboard still contains the copied value.
+Passwords stay hidden until you reveal them. A reveal lasts 10 seconds and ends when you leave the details view or the window loses focus. Copy from a search result or the credential details. Rust sends the password directly to the system clipboard and attempts to clear it after 30 seconds or when the vault locks, provided it still contains the copied value.
 
-Open **Password generator** on the lock screen to generate a password without opening a vault. In the credential editor, choose **Open password generator** and **Use password** to fill the password field. The generator supports 12 to 256 characters and optional symbols.
+Open **Password generator** from the sidebar or the lock screen. In the credential editor, choose **Open password generator** and **Use password** to fill the password field. The generator supports 12 to 256 characters and optional symbols.
 
-Choose **Review passwords** to check the unlocked vault for short and exactly reused passwords. Select a result to open the corresponding credential. The review runs locally and leaves the vault file unchanged.
+Choose **Password review** to check the unlocked vault for short and exactly reused passwords. Select a result to open the corresponding credential. The review runs locally and leaves the vault file unchanged.
 
 Open **Vault settings** to save an encrypted backup or open an existing backup as a separate vault. A backup keeps the unlock methods from the moment it was saved. You can also import up to 64 legacy `.key` files at a time. The import saves the whole batch together and leaves the original plaintext files on disk.
 

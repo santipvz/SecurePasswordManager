@@ -4,7 +4,7 @@
 
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core"
-  import { ArrowLeft, Archive, FolderOpen, KeyRound, Upload } from "@lucide/svelte"
+  import { ArrowLeft, Archive, FolderOpen, KeyRound, ShieldCheck, Upload } from "@lucide/svelte"
   import { onMount, tick } from "svelte"
 
   type FileAction = "save_backup" | "open_backup" | "import_legacy"
@@ -201,29 +201,29 @@
 <svelte:window onkeydown={shortcuts} />
 
 <main class="settings-page">
-  <button class="text-button back" disabled={pending} onclick={onClose}><ArrowLeft size={16} /> Back to entries</button>
+  <button class="text-button back" disabled={pending} onclick={onClose}><ArrowLeft size={16} /> Back to credentials</button>
   <h1 tabindex="-1" bind:this={heading}>Vault settings</h1>
 
   {#if notice}<p class="feedback" role="status">{notice}</p>{/if}
   {#if error}<p class="error-note" role="alert">{error}</p>{/if}
 
   <section aria-labelledby="vault-files-heading">
-    <h2 id="vault-files-heading">Backups and import</h2>
-    <p class="muted">Open a backup as its own vault. Backups keep the master password and any YubiKey registration they had when saved.</p>
-    <div class="actions">
-      <button class="secondary" disabled={pending || Boolean(method)} onclick={() => manageFile("save_backup")}><Archive size={17} /> Save encrypted backup</button>
-      <button class="secondary" disabled={pending || Boolean(method)} onclick={() => manageFile("open_backup")}><FolderOpen size={17} /> Open backup</button>
+    <div class="section-title"><span><Archive size={21} /></span><h2 id="vault-files-heading">Backups and import</h2></div>
+    <div class="setting-row">
+      <div><h3>Encrypted backups</h3><p class="muted">Backups keep the master password and YubiKey registration used when they were saved.</p></div>
+      <div class="actions">
+        <button class="secondary" disabled={pending || Boolean(method)} onclick={() => manageFile("save_backup")}><Archive size={17} /> Save backup</button>
+        <button class="secondary" disabled={pending || Boolean(method)} onclick={() => manageFile("open_backup")}><FolderOpen size={17} /> Open backup</button>
+      </div>
     </div>
-    <p class="muted">Import legacy .key files as a batch. The original files remain on disk in plaintext.</p>
-    <button class="secondary" disabled={pending || Boolean(method)} onclick={() => manageFile("import_legacy")}><Upload size={17} /> Import .key files</button>
+    <div class="setting-row">
+      <div><h3>Legacy credentials</h3><p class="muted">The original .key files remain on disk in plaintext after import.</p></div>
+      <button class="secondary" disabled={pending || Boolean(method)} onclick={() => manageFile("import_legacy")}><Upload size={17} /> Import .key files</button>
+    </div>
   </section>
 
   <section aria-labelledby="unlock-heading">
-    <h2 id="unlock-heading">Unlock methods</h2>
-    <p class="muted">
-      {hasSecurityKey ? "A YubiKey is registered for this vault." : "This vault uses its master password."}
-      Keep your master password for recovery.
-    </p>
+    <div class="section-title"><span><ShieldCheck size={21} /></span><h2 id="unlock-heading">Unlock methods</h2></div>
     {#if method}
       <form onsubmit={updateMethod} autocomplete="off">
         <h3>{labels[method]}</h3>
@@ -266,8 +266,12 @@
         {#if pending}<p class="feedback" role="status"><span class="spinner"></span> {method === "register_key" ? "Waiting for your security key…" : "Saving changes…"}</p>{/if}
       </form>
     {:else}
-      <div class="actions">
+      <div class="setting-row">
+        <div><h3>Master password</h3><p class="muted">Keep your master password for recovery.</p></div>
         <button class="secondary" disabled={pending} onclick={(event) => chooseMethod("change_master", event.currentTarget)}>Change master password</button>
+      </div>
+      <div class="setting-row">
+        <div><h3>YubiKey</h3><p class="muted">{hasSecurityKey ? "A YubiKey is registered for this vault." : "Use a security key to unlock this vault."}</p></div>
         <button class="secondary" disabled={pending} onclick={(event) => chooseMethod(hasSecurityKey ? "remove_key" : "register_key", event.currentTarget)}>
           <KeyRound size={17} /> {hasSecurityKey ? "Remove YubiKey" : "Register YubiKey"}
         </button>
@@ -277,15 +281,19 @@
 </main>
 
 <style>
-  .settings-page { width: min(100%, 780px); margin-inline: auto; padding: 24px; }
-  .back { margin: 0 0 8px -8px; }
-  h1 { font-size: 30px; margin-bottom: 18px; }
-  h2 { font-size: 22px; }
-  h3 { margin: 0; font-size: 16px; }
-  section { display: grid; justify-items: start; gap: 12px; margin-top: 16px; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+  .settings-page { width: min(100%, 910px); margin-inline: auto; padding: clamp(18px, 4vw, 40px); }
+  .back { margin: 0 0 8px -8px; color: var(--muted); }
+  h1 { font-size: clamp(28px, 4vw, 38px); margin-bottom: 24px; }
+  h2 { font-size: 21px; }
+  h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  section { display: grid; gap: 15px; margin-top: 18px; padding: clamp(16px, 2.5vw, 23px); background: var(--surface); border: 1px solid var(--line); border-radius: 13px; }
+  .section-title, .setting-row { display: flex; align-items: center; gap: 12px; }
+  .section-title span { display: grid; place-items: center; width: 39px; height: 39px; border-radius: 10px; color: var(--accent); background: var(--soft); }
+  .setting-row { justify-content: space-between; flex-wrap: wrap; padding-top: 13px; border-top: 1px solid var(--line); }
+  .setting-row p { margin-top: 3px; }
+  .setting-row > .secondary { flex: none; }
   form { display: grid; width: min(100%, 430px); gap: 12px; }
   label { display: grid; gap: 5px; font-weight: 600; }
   input { width: 100%; font: inherit; font-weight: 400; padding: 8px 10px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-  button:disabled { cursor: default; opacity: .65; }
 </style>
