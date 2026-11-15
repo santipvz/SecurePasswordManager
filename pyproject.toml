@@ -28,3 +28,8 @@ cpass-desktop = "spm.desktop_interface:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[dependency-groups]
+build = ["setuptools>=77"]
+desktop-build = ["pyinstaller==6.22.3"]
+lint = ["pylint>=4"]
