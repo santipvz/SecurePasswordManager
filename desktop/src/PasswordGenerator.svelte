@@ -74,13 +74,13 @@
 <svelte:document onvisibilitychange={clear} />
 
 <fieldset class="generator">
-  <legend>Password generator</legend>
+  <legend>Generator options</legend>
   <div class="settings">
     <label>Length <input type="number" step="any" bind:value={length} oninput={reset} onkeydown={generateOnEnter} /></label>
     <label class="symbols"><input type="checkbox" bind:checked={symbols} onchange={reset} /> Include symbols</label>
   </div>
-  <button class="secondary" type="button" disabled={busy} onclick={generate}>
-    <RefreshCw size={16} /> Generate password
+  <button class="primary generate" type="button" disabled={busy} onclick={generate}>
+    <RefreshCw size={16} /> {busy ? "Generating…" : "Generate password"}
   </button>
   {#if password}
     <label class="output">
@@ -88,26 +88,27 @@
       <input type="text" value={password} readonly onkeydown={(event) => { if (event.key === "Enter") event.preventDefault() }} bind:this={output} autocomplete="off" spellcheck={false} />
     </label>
     {#if onUse}
-      <button class="primary" type="button" onclick={usePassword}>Use password</button>
+      <button class="secondary result-action" type="button" onclick={usePassword}>Use password</button>
     {:else}
-      <button class="secondary" type="button" onclick={() => { output?.focus(); output?.select() }}>Select password</button>
+      <button class="secondary result-action" type="button" onclick={() => { output?.focus(); output?.select() }}>Select password</button>
     {/if}
   {/if}
   {#if error}<p class="error-note" role="alert">{error}</p>{/if}
 </fieldset>
 
 <style>
-  .generator { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
-  legend { padding-inline: 5px; font-weight: 600; }
+  .generator { display: grid; gap: 15px; min-width: 0; margin: 0; padding: 13px 0 0; border: 0; border-top: 1px solid var(--line); }
+  legend { padding: 0 8px 0 0; color: var(--muted); font-weight: 600; font-size: 13px; }
   .settings { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
   .settings label { display: flex; gap: 7px; align-items: center; }
   .settings input { accent-color: var(--accent); }
   input[type="number"], input[type="text"] {
     min-width: 0; padding: 6px 8px; color: var(--text); background: var(--surface);
-    border: 1px solid var(--line); border-radius: 7px;
+    border: 1px solid var(--control-line); border-radius: 7px;
   }
   input[type="number"] { width: 72px; }
-  input[type="text"] { width: 100%; font-family: ui-monospace, monospace; }
+  input[type="text"] { width: 100%; min-height: 42px; font-family: ui-monospace, monospace; }
   .output { display: grid; gap: 5px; }
+  .generate, .result-action { justify-self: start; }
   .error-note { margin: 0; }
 </style>
