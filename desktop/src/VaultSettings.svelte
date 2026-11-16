@@ -281,19 +281,19 @@
 </main>
 
 <style>
-  .settings-page { width: min(100%, 910px); margin-inline: auto; padding: clamp(18px, 4vw, 40px); }
+  .settings-page { width: min(100%, 920px); margin-inline: auto; padding: clamp(18px, 4vw, 44px); }
   .back { margin: 0 0 8px -8px; color: var(--muted); }
-  h1 { font-size: clamp(28px, 4vw, 38px); margin-bottom: 24px; }
-  h2 { font-size: 21px; }
+  h1 { font-size: clamp(28px, 4vw, 36px); margin-bottom: 27px; }
+  h2 { font-size: 19px; }
   h3 { margin: 0; font-size: 14px; font-weight: 600; }
-  section { display: grid; gap: 15px; margin-top: 18px; padding: clamp(16px, 2.5vw, 23px); background: var(--surface); border: 1px solid var(--line); border-radius: 13px; }
+  section { display: grid; gap: 12px; margin-top: 22px; }
   .section-title, .setting-row { display: flex; align-items: center; gap: 12px; }
-  .section-title span { display: grid; place-items: center; width: 39px; height: 39px; border-radius: 10px; color: var(--accent); background: var(--soft); }
-  .setting-row { justify-content: space-between; flex-wrap: wrap; padding-top: 13px; border-top: 1px solid var(--line); }
+  .section-title span { display: grid; place-items: center; width: 34px; height: 34px; color: var(--accent); }
+  .setting-row { justify-content: space-between; flex-wrap: wrap; padding: 13px 0 2px; border-top: 1px solid var(--line); }
   .setting-row p { margin-top: 3px; }
   .setting-row > .secondary { flex: none; }
   form { display: grid; width: min(100%, 430px); gap: 12px; }
   label { display: grid; gap: 5px; font-weight: 600; }
-  input { width: 100%; font: inherit; font-weight: 400; padding: 8px 10px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; }
+  input { min-width: 0; width: 100%; font: inherit; font-weight: 400; padding: 9px 10px; color: var(--text); background: var(--surface); border: 1px solid var(--control-line); border-radius: 7px; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 </style>

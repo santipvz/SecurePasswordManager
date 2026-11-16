@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core"
-  import { ArrowLeft, ChevronDown, Copy, Eye, EyeOff, KeyRound, Pencil, Plus, Search, Trash2, X } from "@lucide/svelte"
+  import { ArrowLeft, ChevronDown, Copy, Eye, EyeOff, Globe, KeyRound, Pencil, Plus, Search, Trash2, X } from "@lucide/svelte"
   import { onMount, tick } from "svelte"
   import PasswordGenerator from "./PasswordGenerator.svelte"
   import PasswordReview, { type Review } from "./PasswordReview.svelte"
@@ -145,10 +145,6 @@
       if (event.key === "ArrowUp" && current <= 0) searchInput?.focus()
       else rows[current + (event.key === "ArrowDown" ? 1 : -1)]?.focus()
     }
-  }
-
-  function entryTint(name: string) {
-    return (name.codePointAt(0) ?? 0) % 4
   }
 
   function endsSession(reason: unknown) {
@@ -453,14 +449,14 @@
     <div class="collection-heading entry-heading">
       <div>
         <h1 id="entry-list-heading">Credentials</h1>
-        <p class="muted" aria-live="polite">{matches.length} {matches.length === 1 ? "credential" : "credentials"}</p>
+        <p class="muted" aria-live="polite">{search ? `${matches.length} of ${entries.length}` : matches.length} {entries.length === 1 ? "credential" : "credentials"}</p>
       </div>
       <button class="primary" disabled={busy || conflict || reviewPending || Boolean(editor)} onclick={() => openEditor("add")}><Plus size={17} /> Add entry</button>
     </div>
     <div class="search-box">
       <Search size={17} />
       <input type="search" bind:this={searchInput} value={search} oninput={updateSearch} onkeydown={searchKeys}
-        readonly={searchUnavailable} aria-label="Search vault entries" placeholder="Search your vault" />
+        readonly={searchUnavailable} aria-label="Search vault entries" placeholder="Search credentials…" />
       {#if search}
         <button class="icon-button clear-search" aria-label="Clear search" title="Clear search"
           disabled={searchUnavailable} onclick={clearSearch}><X size={16} /></button>
@@ -481,7 +477,7 @@
                 aria-disabled={Boolean(editor) || busy || reviewPending}
                 onkeydown={searchKeys}
                 onclick={(event) => { if (!editor && !busy && !reviewPending) void showDetails(entry, event.currentTarget, event.detail === 0) }}>
-                <span class="entry-mark" data-color={entryTint(entry.name)} aria-hidden="true">{Array.from(entry.name)[0]?.toUpperCase()}</span>
+                <span class="entry-mark" aria-hidden="true">{Array.from(entry.name)[0]?.toUpperCase()}</span>
                 <span class="entry-text">
                   <strong>{entry.name}</strong>
                   {#if entry.username || entry.url}<span>{entry.username || entry.url}</span>{/if}
@@ -498,7 +494,7 @@
         {/if}
       {:else}
         <div class="list-empty">
-          <Search size={24} aria-hidden="true" />
+          {#if entries.length}<Search size={24} aria-hidden="true" />{/if}
           <h2>{entries.length ? "No matches" : "No credentials yet"}</h2>
           <p class="muted">{entries.length ? "Try a different name, username, or website." : "Add your first credential to this vault."}</p>
           {#if search}<button class="secondary" disabled={searchUnavailable} onclick={clearSearch}>Clear search</button>{/if}
@@ -508,85 +504,87 @@
   </section>
 
   <section class="detail" aria-label="Credential details" bind:this={detailPane}>
-    {#if reviewOpen}
-      <PasswordReview result={review} pending={reviewPending} error={reviewError}
-        onClose={closeReview} onEntry={selectFinding} />
-    {:else if editor}
-      <button class="text-button detail-back" disabled={busy} onclick={closeEditor}><ArrowLeft size={16} /> Cancel and go back</button>
-      <h2>{editor === "add" ? "Add credential" : "Edit credential"}</h2>
-      <form class="credential-form" onsubmit={saveEntry} autocomplete="off">
-        <label>Name <input name="name" value={selected?.name ?? ""} bind:this={nameInput} required /></label>
-        <label>Username <input name="username" value={selected?.username ?? ""} autocomplete="off" /></label>
-        <label>Website <input name="url" value={selected?.url ?? ""} inputmode="url" /></label>
-        <label>
-          {editor === "edit" ? "New password" : "Password"}
-          <input type="password" bind:this={passwordInput} required={editor === "add"}
-            autocomplete="off" autocapitalize="off" spellcheck={false} />
-          {#if editor === "edit"}<small>Leave blank to keep the saved password.</small>{/if}
-        </label>
-        <button class="secondary generator-toggle" type="button" bind:this={generatorToggle} aria-expanded={generatorOpen}
-          onclick={() => generatorOpen = !generatorOpen}>{generatorOpen ? "Hide generator" : "Open password generator"}</button>
-        {#if generatorOpen}<PasswordGenerator {generation} onUse={useGenerated} />{/if}
-        <label>Notes <textarea name="notes" value={notes ?? ""} rows="3" oninput={() => notesEdited = true}></textarea></label>
-        <div class="detail-actions">
-          <button class="primary" type="submit" disabled={busy || conflict}>Save credential</button>
-          <button class="secondary" type="button" disabled={busy} onclick={closeEditor}>Cancel</button>
-        </div>
-      </form>
-    {:else if selected}
-      <button class="text-button detail-back" disabled={busy} onclick={closeDetails}><ArrowLeft size={16} /> Back to entries</button>
-      <div class="detail-heading">
-        <span class="entry-mark large" data-color={entryTint(selected.name)} aria-hidden="true">{Array.from(selected.name)[0]?.toUpperCase()}</span>
-        <div>
-          <h2 tabindex="-1" bind:this={detailHeading}>{selected.name}</h2>
-          {#if selected.url}<p class="muted detail-url">{selected.url}</p>{/if}
-        </div>
-        {#if !confirmation}
-          <button class="secondary edit-action" disabled={busy || conflict || notes === undefined} onclick={() => openEditor("edit")}><Pencil size={15} /> Edit</button>
-        {/if}
-      </div>
-      <dl>
-        {#if selected.username}<div><dt>Username</dt><dd>{selected.username}</dd></div>{/if}
-        <div>
-          <dt>Password</dt>
-          <dd class="password-row">
-            <span class="password-text" aria-label={revealed === undefined ? "Password hidden" : undefined}>{revealed ?? "••••••••••"}</span>
-            <div class="detail-actions">
-              <button class="icon-button" title={revealed === undefined ? "Reveal password" : "Hide password"} aria-label={revealed === undefined ? "Reveal password" : "Hide password"}
-                disabled={busy || confirmation} onclick={revealPassword}>
-                {#if revealed === undefined}<Eye size={18} />{:else}<EyeOff size={18} />{/if}
-              </button>
-              <button class="primary copy-detail" aria-label="Copy password" disabled={busy || confirmation}
-                onclick={() => { if (selected) void copyPassword(selected) }}><Copy size={16} /> <span>Copy</span></button>
-            </div>
-          </dd>
-        </div>
-        {#if notes}<div><dt>Notes</dt><dd class="notes">{notes}</dd></div>{/if}
-      </dl>
-      {#if confirmation}
-        <div class="delete-confirmation">
-          <p>Delete this credential from the vault?</p>
-          <div class="detail-actions">
-            <button class="secondary" bind:this={cancelDelete} disabled={busy} onclick={keepEntry}>Keep credential</button>
-            <button class="danger" disabled={busy || conflict} onclick={deleteEntry}>Delete credential</button>
+    <div class="detail-content">
+      {#if reviewOpen}
+        <PasswordReview result={review} pending={reviewPending} error={reviewError}
+          onClose={closeReview} onEntry={selectFinding} />
+      {:else if editor}
+        <button class="text-button detail-back" disabled={busy} onclick={closeEditor}><ArrowLeft size={16} /> Cancel and go back</button>
+        <h2 class="panel-title">{editor === "add" ? "Add credential" : "Edit credential"}</h2>
+        <form class="credential-form" onsubmit={saveEntry} autocomplete="off">
+          <label>Name <input name="name" value={selected?.name ?? ""} bind:this={nameInput} required /></label>
+          <div class="credential-fields">
+            <label>Username <input name="username" value={selected?.username ?? ""} autocomplete="off" /></label>
+            <label>Website <input name="url" value={selected?.url ?? ""} inputmode="url" /></label>
           </div>
+          <label>
+            {editor === "edit" ? "New password" : "Password"}
+            <input type="password" bind:this={passwordInput} required={editor === "add"}
+              autocomplete="off" autocapitalize="off" spellcheck={false} />
+            {#if editor === "edit"}<small>Leave blank to keep the saved password.</small>{/if}
+          </label>
+          <button class="secondary generator-toggle" type="button" bind:this={generatorToggle} aria-expanded={generatorOpen}
+            onclick={() => generatorOpen = !generatorOpen}>{generatorOpen ? "Hide generator" : "Open password generator"}</button>
+          {#if generatorOpen}<PasswordGenerator {generation} onUse={useGenerated} />{/if}
+          <label>Notes <textarea name="notes" value={notes ?? ""} rows="3" oninput={() => notesEdited = true}></textarea></label>
+          <div class="detail-actions">
+            <button class="primary" type="submit" disabled={busy || conflict}>Save credential</button>
+            <button class="secondary" type="button" disabled={busy} onclick={closeEditor}>Cancel</button>
+          </div>
+        </form>
+      {:else if selected}
+        <button class="text-button detail-back" disabled={busy} onclick={closeDetails}><ArrowLeft size={16} /> Back to entries</button>
+        <div class="detail-heading">
+          <div>
+            <h2 tabindex="-1" bind:this={detailHeading}>{selected.name}</h2>
+            {#if selected.url}<p class="muted detail-url"><Globe size={15} /> {selected.url}</p>{/if}
+          </div>
+          {#if !confirmation}
+            <button class="secondary edit-action" disabled={busy || conflict || notes === undefined} onclick={() => openEditor("edit")}><Pencil size={15} /> Edit</button>
+          {/if}
         </div>
-      {:else}
-        <div class="detail-actions">
-          <button class="text-button delete-link" disabled={busy || conflict} onclick={askDelete}><Trash2 size={16} /> Delete credential</button>
+        <dl>
+          {#if selected.username}<div><dt>Username</dt><dd>{selected.username}</dd></div>{/if}
+          <div>
+            <dt>Password</dt>
+            <dd class="password-row">
+              <span class="password-text" aria-label={revealed === undefined ? "Password hidden" : undefined}>{revealed ?? "••••••••••"}</span>
+              <div class="detail-actions">
+                <button class="icon-button" title={revealed === undefined ? "Reveal password" : "Hide password"} aria-label={revealed === undefined ? "Reveal password" : "Hide password"}
+                  disabled={busy || confirmation} onclick={revealPassword}>
+                  {#if revealed === undefined}<Eye size={18} />{:else}<EyeOff size={18} />{/if}
+                </button>
+                <button class="primary copy-detail" aria-label="Copy password" disabled={busy || confirmation}
+                  onclick={() => { if (selected) void copyPassword(selected) }}><Copy size={16} /> <span>Copy password</span></button>
+              </div>
+            </dd>
+          </div>
+          {#if notes}<div><dt>Notes</dt><dd class="notes">{notes}</dd></div>{/if}
+        </dl>
+        {#if confirmation}
+          <div class="delete-confirmation">
+            <p>Delete this credential from the vault?</p>
+            <div class="detail-actions">
+              <button class="secondary" bind:this={cancelDelete} disabled={busy} onclick={keepEntry}>Keep credential</button>
+              <button class="danger" disabled={busy || conflict} onclick={deleteEntry}>Delete credential</button>
+            </div>
+          </div>
+        {:else}
+          <div class="detail-actions">
+            <button class="text-button delete-link" disabled={busy || conflict} onclick={askDelete}><Trash2 size={16} /> Delete credential</button>
+          </div>
+        {/if}
+      {:else if matches.length}
+        <div class="detail-empty">
+          <span class="detail-empty-icon"><KeyRound size={29} strokeWidth={1.5} /></span>
+          <h2>Select a credential</h2>
         </div>
       {/if}
-    {:else}
-      <div class="detail-empty">
-        <span class="detail-empty-icon"><KeyRound size={29} strokeWidth={1.5} /></span>
-        <h2>Select a credential</h2>
-        <p>Choose an entry to view or edit its details.</p>
-      </div>
-    {/if}
-    {#if error || (conflict && (selected || editor))}
-      <p class="error-note entry-feedback" role="alert">{error || messages.write_conflict}</p>
-    {/if}
-    {#if (selected || editor) && feedback}<p class="feedback" role="status">{feedback}</p>{/if}
+      {#if error || (conflict && (selected || editor))}
+        <p class="error-note entry-feedback" role="alert">{error || messages.write_conflict}</p>
+      {/if}
+      {#if (selected || editor) && feedback}<p class="feedback entry-success" role="status">{feedback}</p>{/if}
+    </div>
   </section>
 </main>
 
@@ -594,99 +592,144 @@
   .credential-workspace {
     flex: 1;
     display: grid;
-    grid-template-columns: minmax(280px, .81fr) minmax(310px, 1fr);
+    grid-template-columns: clamp(300px, 33vw, 380px) minmax(0, 1fr);
     min-height: 0;
   }
-  .collection, .detail { padding: 31px clamp(17px, 2.8vw, 38px); }
-  .collection { display: flex; flex-direction: column; min-height: 0; padding-bottom: 0; background: var(--canvas); }
-  .collection-scroll, .detail { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-  .collection-scroll { padding: 4px 5px 23px 4px; margin: -4px -5px 0 -4px; }
-  .collection h1 { font-size: clamp(26px, 3vw, 35px); }
-  .collection-heading p { margin-top: 6px; }
-  .entry-heading { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
-  .entry-heading .primary { flex: none; min-height: 38px; padding: 7px 12px; }
-  .search-box { min-height: 44px; margin: 22px 0 16px; border-radius: 10px; }
+  .collection {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 24px 20px 0;
+    background: var(--sidebar);
+  }
+  .collection h1 { font-size: clamp(23px, 2.6vw, 28px); }
+  .collection-heading p { margin-top: 5px; font-size: 13px; }
+  .entry-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .entry-heading .primary { flex: none; min-height: 36px; padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+  .search-box {
+    min-height: 42px;
+    margin: 18px 0 14px;
+    border-radius: 7px;
+    border-color: var(--control-line);
+  }
   .search-box input::-webkit-search-cancel-button { display: none; }
-  .clear-search { width: 30px; height: 30px; margin-right: -4px; }
-  .credential-list {
-    padding: 4px;
-    border: 1px solid var(--line);
-    border-radius: 13px;
-    background: var(--surface);
-  }
+  .search-box kbd { background: var(--canvas); }
+  .clear-search { width: 32px; height: 32px; margin-right: -4px; }
+  .collection-scroll, .detail { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .collection-scroll { padding: 4px 4px 24px; margin: -4px; }
   .credential-list li {
-    display: flex; align-items: center; gap: 2px; border: 1px solid transparent;
-    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    border-radius: 7px;
   }
-  .credential-list li + li { margin-top: 1px; }
-  .credential-list li:hover { background: var(--canvas); }
-  .credential-list li.active-row { background: var(--soft); border-color: var(--line); }
-  .credential-list .credential-row { flex: 1; min-width: 0; min-height: 62px; background: transparent; }
+  .credential-list li + li { margin-top: 2px; }
+  .credential-list li:hover { background: var(--surface); }
+  .credential-list li.active-row { background: var(--soft); }
+  .credential-list .credential-row {
+    flex: 1;
+    min-width: 0;
+    min-height: 57px;
+    padding: 7px 8px;
+    background: transparent;
+    border-radius: 7px;
+  }
   .credential-list .row-copy {
-    flex: none; width: 35px; min-height: 35px; height: 35px; margin-right: 6px;
-    padding: 0; justify-content: center; color: var(--muted);
+    flex: none;
+    width: 35px;
+    min-height: 35px;
+    height: 35px;
+    margin-right: 4px;
+    padding: 0;
+    justify-content: center;
+    color: var(--muted);
+    border-radius: 6px;
   }
-  .credential-list .row-copy:hover { background: var(--soft); color: var(--accent); }
-  .entry-mark { color: #50369f; background: #eee8ff; }
-  .entry-mark[data-color="1"] { color: #185474; background: #dff1ff; }
-  .entry-mark[data-color="2"] { color: #20604b; background: #dbf1e8; }
-  .entry-mark[data-color="3"] { color: #844724; background: #f9e8dc; }
+  .credential-list .row-copy:hover { background: var(--surface); color: var(--accent); }
+  .entry-mark {
+    width: 32px;
+    height: 32px;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .active-row .entry-mark { color: var(--accent); }
   .entry-text strong { font-weight: 600; }
   .entry-text span { font-size: 12px; }
-  .list-status { margin: 0 0 10px; color: var(--accent); }
-  .list-empty {
-    display: grid; gap: 10px; justify-items: center; padding: 37px 14px;
-    text-align: center; border: 1px dashed var(--line); border-radius: 13px;
-  }
-  .list-empty > :global(svg) { color: var(--accent); }
+  .list-status, .entry-success { color: var(--accent); }
+  .list-status { margin: 0 0 8px; }
+  .list-empty { display: grid; gap: 8px; justify-items: start; padding: 18px 6px; }
+  .list-empty > :global(svg) { color: var(--muted); }
   .list-empty h2 { font-size: 19px; }
-  .detail-heading { gap: 14px; }
+  .list-empty button { margin-top: 5px; }
+  .detail { padding: clamp(24px, 4.2vw, 47px); }
+  .detail-content { width: min(100%, 670px); }
+  .detail-heading { justify-content: space-between; gap: 10px; }
   .detail-heading > div { min-width: 0; }
-  .detail-heading h2 { font-size: clamp(22px, 3vw, 34px); }
-  .detail-heading .detail-url { margin-top: 5px; font-size: 13px; overflow-wrap: anywhere; }
-  .edit-action { margin-left: auto; min-height: 36px; flex: none; }
-  .detail dl { display: grid; gap: 13px; margin: 28px 0 16px; }
-  .detail dl > div {
-    min-width: 0; padding: 13px 14px; border: 1px solid var(--line);
-    background: var(--canvas); border-radius: 10px;
-  }
-  .detail dl dt { margin-bottom: 4px; font-weight: 600; }
+  .detail-heading h2, .panel-title { font-size: clamp(24px, 3.2vw, 36px); }
+  .detail-heading .detail-url { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 13px; overflow-wrap: anywhere; }
+  .detail-url :global(svg) { flex: none; }
+  .edit-action { margin-left: auto; min-height: 35px; flex: none; }
+  .detail dl { display: grid; gap: 0; margin: 25px 0 14px; border-top: 1px solid var(--line); }
+  .detail dl > div { min-width: 0; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .detail dl dt { margin-bottom: 5px; font-weight: 600; }
+  .detail dl .password-row { min-height: 38px; flex-wrap: wrap; }
   .detail-empty {
-    display: grid; justify-items: center; gap: 9px; text-align: center;
-    padding: 0; margin: clamp(70px, 16vh, 165px) auto 0;
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    text-align: center;
+    padding: 0;
+    margin: clamp(60px, 17vh, 175px) auto 0;
   }
-  .detail-empty-icon {
-    display: grid; place-items: center; width: 60px; height: 60px; margin-bottom: 8px;
-    background: var(--soft); color: var(--accent); border-radius: 17px;
-  }
-  .detail-empty h2 { font-size: 22px; color: var(--text); }
-  .copy-detail { min-height: 35px; padding: 6px 10px; }
+  .detail-empty-icon { color: var(--muted); margin-bottom: 7px; }
+  .detail-empty h2 { font-size: 20px; color: var(--text); }
+  .copy-detail { min-height: 36px; padding: 6px 10px; }
   .review-view { display: block; overflow-y: auto; }
   .review-view .collection { display: none; }
-  .review-view .detail {
-    max-width: 730px; margin-inline: auto; border: 0; background: transparent; overflow: visible;
-  }
+  .review-view .detail { max-width: 790px; margin-inline: auto; border: 0; background: transparent; overflow: visible; }
   .generator-toggle { justify-self: start; }
-  .credential-form { display: grid; gap: 13px; margin-top: 20px; }
+  .credential-form { display: grid; gap: 15px; margin-top: 22px; }
+  .credential-fields { display: grid; gap: 15px; }
   .credential-form label { display: grid; gap: 5px; font-weight: 600; }
   .credential-form small { color: var(--muted); font-weight: 400; }
   .credential-form input, .credential-form textarea {
-    width: 100%; min-width: 0; font: inherit; font-weight: 400; color: var(--text);
-    background: var(--canvas); border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px;
+    width: 100%;
+    min-width: 0;
+    font: inherit;
+    font-weight: 400;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--control-line);
+    border-radius: 7px;
+    padding: 9px 11px;
   }
   .credential-form textarea { resize: vertical; }
   .password-text, .notes { white-space: pre-wrap; overflow-wrap: anywhere; }
   .password-text { font-family: ui-monospace, monospace; }
   .detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .password-row .detail-actions { flex-wrap: nowrap; flex: none; }
+  .password-row .detail-actions { flex-wrap: nowrap; max-width: 100%; }
   .more, .entry-feedback { margin-top: 13px; }
   .delete-confirmation { display: grid; gap: 10px; }
   .delete-link { color: var(--error-text); }
-  .danger { color: var(--error-text); background: var(--error-bg); border: 1px solid transparent; border-radius: 10px; padding: 9px 14px; min-height: 43px; }
+  .danger { color: var(--error-text); background: var(--error-bg); border: 1px solid transparent; border-radius: 7px; padding: 9px 14px; min-height: 40px; }
+  @media (min-width: 1020px) {
+    .credential-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
   @media (max-width: 760px) {
-    .credential-workspace { grid-template-columns: minmax(0, 1fr); min-height: calc(100vh - 108px); }
-    .collection, .detail { padding-block: 22px; }
-    .collection-scroll, .detail, .review-view { overflow: visible; }
-    .detail-heading .entry-mark.large { width: 44px; height: 44px; font-size: 17px; }
+    .credential-workspace { grid-template-columns: minmax(0, 1fr); }
+    .collection, .detail { padding: 19px 17px; }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .credential-list .row-copy { opacity: 0; }
+    .credential-list li:hover .row-copy,
+    .credential-list li:focus-within .row-copy,
+    .credential-list li.active-row .row-copy { opacity: 1; }
+  }
+  @media (pointer: coarse) {
+    .credential-list .row-copy { min-height: 44px; height: 44px; width: 44px; }
   }
 </style>

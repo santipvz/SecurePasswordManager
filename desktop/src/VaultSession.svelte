@@ -1,7 +1,8 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core"
-  import { ArrowLeft, ArrowRight, FolderOpen, KeyRound, LayoutList, LockKeyhole, Moon, Plus, Settings, ShieldCheck, Sparkles, Sun } from "@lucide/svelte"
+  import { ArrowLeft, FolderOpen, HardDrive, KeyRound, LayoutList, LockKeyhole, Moon, Plus, Settings, ShieldCheck, Sun } from "@lucide/svelte"
   import { onMount, tick } from "svelte"
+  import BrandMark from "./BrandMark.svelte"
   import PasswordGenerator from "./PasswordGenerator.svelte"
   import VaultEntries from "./VaultEntries.svelte"
   import VaultSettings from "./VaultSettings.svelte"
@@ -283,13 +284,6 @@
 
 <svelte:window onkeydown={activity} onpointerdown={activity} onfocus={checkSession} />
 
-{#snippet brand()}
-  <div class="brand">
-    <span class="brand-icon"><ShieldCheck size={21} /></span>
-    <span>Secure Password<br class="rail-break" /> Manager</span>
-  </div>
-{/snippet}
-
 {#snippet themeControl()}
   <button class="icon-button theme-control" aria-label={theme === "light" ? "Use dark theme" : "Use light theme"}
     title={theme === "light" ? "Use dark theme" : "Use light theme"}
@@ -301,25 +295,29 @@
 <div class="app desktop-app" data-theme={theme}>
   {#if phase === "unlocked" && generation !== undefined}
     <div class="vault-shell">
-      <aside class="vault-rail">
-        {@render brand()}
-        <nav aria-label="Vault navigation">
+      <header class="vault-toolbar">
+        <div class="app-brand" translate="no">
+          <BrandMark size={32} />
+          <div><span>Secure Password Manager</span><small>{status?.file_name ?? "Local vault"}</small></div>
+        </div>
+        <nav class="vault-nav" aria-label="Vault navigation">
           <button aria-label="Credentials" title="Credentials" aria-current={view === "credentials" && !reviewing ? "page" : undefined}
-            disabled={navigationBusy} onclick={() => navigate("credentials")}><LayoutList size={19} /> <span>Credentials</span></button>
+            disabled={navigationBusy} onclick={() => navigate("credentials")}><LayoutList size={16} /> <span>Vault</span></button>
           <button aria-label="Password review" title="Password review" aria-current={reviewing ? "page" : undefined}
-            disabled={navigationBusy} onclick={showReview}><ShieldCheck size={19} /> <span>Password review</span></button>
+            disabled={navigationBusy} onclick={showReview}><ShieldCheck size={16} /> <span>Review</span></button>
           <button aria-label="Password generator" title="Password generator" aria-current={view === "generator" ? "page" : undefined}
-            disabled={navigationBusy} onclick={() => navigate("generator")}><Sparkles size={19} /> <span>Password generator</span></button>
+            disabled={navigationBusy} onclick={() => navigate("generator")}><KeyRound size={16} /> <span>Generator</span></button>
           <button aria-label="Vault settings" title="Vault settings" aria-current={view === "settings" ? "page" : undefined}
-            disabled={navigationBusy} onclick={() => navigate("settings")}><Settings size={19} /> <span>Vault settings</span></button>
+            disabled={navigationBusy} onclick={() => navigate("settings")}><Settings size={16} /> <span>Settings</span></button>
         </nav>
-        <button class="rail-lock" aria-label="Lock vault" title="Lock vault" onclick={() => endSession("")}><LockKeyhole size={18} /> <span>Lock vault</span></button>
-      </aside>
-      <div class="vault-content">
-        <header class="vault-toolbar">
-          <span class="vault-location"><LockKeyhole size={15} /> <span>{status?.file_name ?? "Local vault"}</span></span>
+        <div class="window-actions">
           {@render themeControl()}
-        </header>
+          <button class="secondary lock-action" aria-label="Lock vault" title="Lock vault" onclick={() => endSession("")}>
+            <LockKeyhole size={16} /> <span>Lock vault</span>
+          </button>
+        </div>
+      </header>
+      <div class="vault-content">
         {#if view === "settings"}
           <div class="vault-page">
             <VaultSettings {generation} nativePrompt={Boolean(status?.native_key_prompt)} bind:hasSecurityKey bind:pending={settingsPending}
@@ -341,11 +339,17 @@
     </div>
   {:else}
     <main class="desktop-welcome">
+      <aside class="welcome-identity" aria-label="Secure Password Manager">
+        <div class="identity-brand" translate="no">
+          <BrandMark size={64} />
+          <p>Secure Password<br /> Manager</p>
+        </div>
+        <span class="storage-note"><HardDrive size={16} /> Local vault storage</span>
+      </aside>
       <div class="welcome-main">
-        <header class="welcome-header">
-          {@render brand()}
+        <div class="welcome-header">
           {@render themeControl()}
-        </header>
+        </div>
         <div class="welcome-body">
           {#if showGenerator}
             <section class="unlock-card" aria-labelledby="generator-title">
@@ -404,7 +408,7 @@
                         <input class="password-input full" id="key-pin" type="password" bind:this={pinInput}
                           autocomplete="off" autocapitalize="off" spellcheck={false} />
                       {/if}
-                      <button class="primary full" type="submit" bind:this={keyButton}>Unlock with YubiKey <ArrowRight size={17} /></button>
+                      <button class="primary full" type="submit" bind:this={keyButton}>Unlock with YubiKey</button>
                     {:else}
                       <label class="password-label" for="master-password">Master password</label>
                       <input class="password-input full" id="master-password" type="password" bind:this={passwordInput}
@@ -414,7 +418,7 @@
                         <input class="password-input full" id="confirm-master" type="password" bind:this={confirmationInput}
                           autocomplete="off" autocapitalize="off" spellcheck={false} required />
                       {/if}
-                      <button class="primary full" type="submit">{creating ? "Create vault" : "Unlock vault"} <ArrowRight size={17} /></button>
+                      <button class="primary full" type="submit">{creating ? "Create vault" : "Unlock vault"}</button>
                     {/if}
                   </form>
                 {/if}
@@ -425,14 +429,11 @@
                 {#if status?.file_name || !status}
                   <button class="text-button default-vault" onclick={() => choose("default")}>Use default vault</button>
                 {/if}
-                <button class="text-button generator-link" bind:this={generatorButton} onclick={() => toggleGenerator(true)}><Sparkles size={16} /> Password generator</button>
+                <button class="text-button generator-link" bind:this={generatorButton} onclick={() => toggleGenerator(true)}><KeyRound size={16} /> Password generator</button>
               {/if}
             </section>
           {/if}
         </div>
-      </div>
-      <div class="vault-art" aria-hidden="true">
-        <div class="art-orbit"><div class="art-lock"><LockKeyhole size={84} strokeWidth={1.25} /></div></div>
       </div>
     </main>
   {/if}
@@ -440,151 +441,150 @@
 
 <style>
   .vault-shell {
-    display: grid;
-    grid-template-columns: 224px minmax(0, 1fr);
-    min-height: 100vh;
-  }
-  .vault-rail {
-    position: sticky;
-    top: 0;
     display: flex;
     flex-direction: column;
+    min-height: 100vh;
     height: 100vh;
-    min-height: 325px;
-    padding: 25px 16px 17px;
-    background: #1b1930;
-    color: #fbfaff;
   }
-  .brand { gap: 11px; font-size: 14px; line-height: 1.35; letter-spacing: -.015em; }
-  .brand-icon { flex: none; width: 39px; height: 39px; color: #fff; background: #6551d9; }
-  .vault-rail .brand { margin: 2px 6px 37px; }
-  .vault-rail nav { display: grid; gap: 5px; }
-  .vault-rail button {
-    display: flex;
+  .vault-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    gap: 10px;
-    min-height: 44px;
-    padding: 9px 11px;
+    flex: none;
+    gap: 14px;
+    padding: 10px 22px;
+    min-height: 62px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .app-brand { display: flex; align-items: center; gap: 10px; min-width: 0; line-height: 1.35; }
+  .app-brand :global(img) { flex: none; }
+  .app-brand div { min-width: 0; }
+  .app-brand span, .app-brand small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .app-brand span { font-size: 13px; font-weight: 700; }
+  .app-brand small { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .vault-nav, .window-actions { display: flex; align-items: center; gap: 4px; }
+  .vault-nav { padding: 3px; border-radius: 8px; background: var(--canvas); }
+  .vault-nav button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 33px;
+    padding: 5px 10px;
     background: transparent;
-    color: #c9c4de;
     border: 1px solid transparent;
-    border-radius: 9px;
-    text-align: left;
+    border-radius: 6px;
+    color: var(--muted);
     font-size: 13px;
     font-weight: 600;
   }
-  .vault-rail button:hover { background: #ffffff13; color: #fff; }
-  .vault-rail button[aria-current="page"] { background: #3a3161; color: #fff; border-color: #514478; }
-  .vault-rail button:focus-visible { outline-color: #c1b4ff; }
-  .vault-rail button :global(svg) { flex: none; }
-  .vault-rail .rail-lock { margin-top: auto; border-color: #48425e; color: #eeeafd; }
-  .vault-content { display: flex; flex-direction: column; min-width: 0; height: 100vh; }
-  .vault-toolbar, .welcome-header { display: flex; justify-content: space-between; align-items: center; }
-  .vault-toolbar { flex: none; height: 64px; padding: 0 26px; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .vault-nav button:hover { background: var(--soft); color: var(--text); }
+  .vault-nav button[aria-current="page"] { background: var(--surface); color: var(--accent); border-color: var(--line); }
+  .window-actions { justify-content: flex-end; gap: 8px; }
+  .theme-control { color: var(--muted); border: 1px solid var(--line); }
+  .lock-action { min-height: 38px; padding: 7px 10px; font-size: 13px; white-space: nowrap; }
+  .vault-content { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
   .vault-page { flex: 1; min-height: 0; overflow-y: auto; }
-  .vault-location {
-    display: flex; align-items: center; gap: 8px; min-width: 0; margin-right: 12px;
-    font-weight: 600; color: var(--muted);
-  }
-  .vault-location span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .vault-location :global(svg) { flex: none; color: var(--accent); }
-  .theme-control { border: 1px solid var(--line); }
-  .tool-page { width: min(100%, 660px); margin-inline: auto; padding: clamp(18px, 5vw, 44px); }
-  .tool-page h1 { margin: 7px 0 26px; font-size: clamp(28px, 4.2vw, 38px); }
+  .tool-page { width: min(100%, 670px); margin-inline: auto; padding: clamp(20px, 5vw, 45px); }
+  .tool-page h1 { margin: 6px 0 23px; font-size: clamp(28px, 4vw, 36px); }
   .back-link { margin-left: -9px; color: var(--muted); }
 
   .desktop-welcome {
     min-height: 100vh;
     display: grid;
-    grid-template-columns: minmax(385px, 1.05fr) minmax(0, .95fr);
+    grid-template-columns: minmax(295px, .77fr) minmax(0, 1.23fr);
     background: var(--surface);
+  }
+  .welcome-identity {
+    background: var(--identity);
+    color: #f1f5fc;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 40px clamp(28px, 5vw, 66px);
+    position: relative;
+  }
+  .identity-brand p {
+    margin-top: 20px;
+    font-size: clamp(27px, 3.4vw, 43px);
+    font-weight: 600;
+    letter-spacing: -.038em;
+    line-height: 1.12;
+  }
+  .storage-note {
+    position: absolute;
+    inset-inline-start: clamp(28px, 5vw, 66px);
+    inset-block-end: 36px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    color: #becce2;
+    font-size: 13px;
   }
   .welcome-main { display: flex; flex-direction: column; min-width: 0; }
-  .welcome-header { padding: 24px clamp(24px, 4vw, 52px); }
-  .welcome-header .rail-break { display: none; }
-  .welcome-body { display: grid; flex: 1; place-items: center; padding: 22px 30px 52px; }
-  .desktop-welcome .unlock-card {
-    width: min(100%, 390px); padding: 0; background: transparent; border: 0; box-shadow: none;
-  }
-  .unlock-card h1 { font-size: clamp(32px, 4.25vw, 48px); letter-spacing: -.055em; }
-  .welcome-copy { margin: 13px 0 26px; overflow-wrap: anywhere; }
+  .welcome-header { display: flex; justify-content: flex-end; padding: 20px 24px 0; }
+  .welcome-body { display: grid; flex: 1; place-items: center; padding: 24px 30px 54px; }
+  .desktop-welcome .unlock-card { width: min(100%, 400px); padding: 0; background: transparent; border: 0; box-shadow: none; }
+  .unlock-card h1 { font-size: clamp(29px, 4.1vw, 40px); letter-spacing: -.04em; }
+  .welcome-copy { margin: 10px 0 23px; overflow-wrap: anywhere; }
   .welcome-copy strong { color: var(--text); font-weight: 600; }
-  .unlock-card .full { margin-bottom: 14px; }
-  .unlock-card form > .primary { min-height: 48px; }
-  .unlock-card form > .primary :global(svg) { margin-left: auto; }
-  .unlock-methods {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 3px;
-    margin-bottom: 17px; padding: 4px; border-radius: 10px; background: var(--canvas);
-    border: 1px solid var(--line);
-  }
+  .unlock-card .full { margin-bottom: 12px; }
+  .unlock-card form > .primary { min-height: 44px; }
+  .unlock-methods { display: flex; gap: 3px; margin-bottom: 18px; padding: 4px; border-radius: 8px; background: var(--canvas); }
   .unlock-methods button {
-    display: flex; justify-content: center; align-items: center; gap: 8px;
-    min-height: 38px; padding: 5px; background: none; border: 1px solid transparent;
-    border-radius: 7px; color: var(--muted); font-weight: 600;
+    display: flex;
+    flex: 1;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    min-height: 37px;
+    padding: 5px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--muted);
+    font-weight: 600;
   }
   .unlock-methods button[aria-pressed="true"] { background: var(--surface); color: var(--accent); border-color: var(--line); }
-  .vault-file-actions {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 9px;
-    padding-top: 15px; border-top: 1px solid var(--line);
-  }
-  .vault-file-actions.first-run { grid-template-columns: 1fr; gap: 10px; margin-top: 0; padding-top: 0; border: 0; }
-  .generator-link, .default-vault { display: flex; width: 100%; margin-top: 7px; color: var(--muted); }
-  .vault-art {
-    display: grid; place-items: center; overflow: hidden; min-width: 0;
-    margin: 14px 14px 14px 0; border-radius: 21px;
-    background:
-      radial-gradient(ellipse at 32% 24%, #8f7df5a6, transparent 49%),
-      radial-gradient(ellipse at 90% 77%, #3b33a7c7, transparent 45%),
-      linear-gradient(151deg, #6552d6 0%, #46368f 49%, #211c4b 100%);
-  }
-  .art-orbit {
-    display: grid; place-items: center; position: relative; width: clamp(182px, 25vw, 286px); aspect-ratio: 1;
-    border: 1px solid #f2eeff44; border-radius: 50%; background: #d0c5ff0e;
-    box-shadow: 0 0 0 39px #e8dfff09, 0 0 0 40px #eee9ff25, 0 0 0 77px #e4ddff08, 0 0 0 78px #eee9ff19;
-  }
-  .art-lock {
-    display: grid; place-items: center; width: 56%; aspect-ratio: 1;
-    border: 1px solid #f2eaff66; border-radius: 30%; color: #faf8ff;
-    background: linear-gradient(145deg, #f4eeff38, #bca8ff17);
-    box-shadow: 0 26px 44px #24175964, inset 0 1px #fff5;
-  }
-  .art-lock :global(svg) { width: 53%; height: auto; }
-  .standalone-generator { margin: 16px 0; }
+  .unlock-methods button:hover { background: var(--soft); }
+  .vault-file-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 10px; padding-top: 13px; border-top: 1px solid var(--line); }
+  .vault-file-actions.first-run { grid-template-columns: 1fr; gap: 10px; margin: 0; padding: 0; border: 0; }
+  .generator-link, .default-vault { display: flex; width: 100%; margin-top: 5px; color: var(--muted); }
+  .standalone-generator { margin-top: 17px; }
   .password-label { display: block; margin-bottom: 6px; font-weight: 600; }
-  .password-input {
-    min-height: 46px;
-    padding: 9px 12px;
-    border: 1px solid var(--line);
-    border-radius: 9px;
-    background: var(--surface);
-    color: var(--text);
-  }
+  .password-input { min-height: 44px; padding: 9px 12px; border: 1px solid var(--control-line); border-radius: 7px; background: var(--surface); color: var(--text); }
 
-  @media (max-width: 1060px) {
-    .vault-shell { grid-template-columns: 190px minmax(0, 1fr); }
-  }
   @media (max-width: 920px) {
-    .vault-shell { grid-template-columns: 64px minmax(0, 1fr); }
-    .vault-rail { padding-inline: 10px; }
-    .vault-rail .brand { margin-inline: auto; }
-    .vault-rail button { justify-content: center; padding-inline: 0; }
-    .vault-rail button span, .vault-rail .brand span:last-child { display: none; }
+    .vault-toolbar { padding-inline: 16px; gap: 9px; }
+    .vault-nav button { padding-inline: 8px; }
   }
   @media (max-width: 760px) {
-    .vault-shell { display: flex; flex-direction: column; }
-    .vault-rail {
-      z-index: 2; flex-direction: row; align-items: center; gap: 8px;
-      height: 58px; min-height: 0; padding: 6px 12px;
-    }
-    .vault-rail .brand { margin: 0 auto 0 0; }
-    .vault-rail nav { display: flex; gap: 4px; }
-    .vault-rail button { width: 40px; min-height: 40px; }
-    .vault-rail .rail-lock { margin-top: 0; }
-    .vault-toolbar { height: 50px; padding-inline: 16px; }
-    .vault-content { height: auto; }
-    .vault-page { overflow: visible; }
-    .theme-control { width: 34px; height: 34px; }
-    .desktop-welcome { grid-template-columns: minmax(0, 1fr); }
-    .vault-art { display: none; }
+    .vault-toolbar { grid-template-columns: minmax(0, 1fr) auto; padding: 10px 13px 8px; }
+    .vault-nav { grid-column: 1 / -1; grid-row: 2; }
+    .vault-nav button { flex: 1; min-width: 0; gap: 4px; padding-inline: 4px; }
+    .vault-nav button :global(svg) { flex: none; }
+    .lock-action span { display: none; }
+    .lock-action { width: 38px; }
+    .desktop-welcome { position: relative; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+    .welcome-identity { padding: 15px 66px 15px 18px; }
+    .identity-brand { display: flex; align-items: center; gap: 11px; }
+    .identity-brand :global(img) { width: 35px; height: 35px; }
+    .identity-brand p { margin: 0; font-size: 14px; letter-spacing: -.01em; line-height: 1.27; }
+    .identity-brand br { display: none; }
+    .storage-note { display: none; }
+    .welcome-body { padding: 20px 21px 25px; }
+    .welcome-header { position: absolute; inset-block-start: 13px; inset-inline-end: 16px; padding: 0; }
+    .welcome-header .theme-control { color: #e3edfc; border-color: #667e9f; }
+    .welcome-header .theme-control:hover { background: #293d5e; }
+    .welcome-header .theme-control:focus-visible { outline-color: #a9c1ff; }
+  }
+  @media (pointer: coarse) {
+    .vault-nav button, .lock-action, .theme-control { min-height: 44px; }
   }
 </style>

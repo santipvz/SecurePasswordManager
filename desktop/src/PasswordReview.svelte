@@ -42,10 +42,10 @@
   {#if result.total === 0}
     <p class="empty">This vault has no credentials to review.</p>
   {:else if !affected.length}
-    <p class="feedback"><ShieldCheck size={18} /> All passwords are unique and at least {result.minimum_length} characters long.</p>
+    <p class="feedback review-clear"><ShieldCheck size={18} /> All passwords are unique and at least {result.minimum_length} characters long.</p>
   {:else}
     <p class="feedback">{affected.length} of {result.total} credentials have short or reused passwords.</p>
-    <ul class="entries">
+    <ul class="entries findings">
       {#each affected.slice(0, limit) as entry (entry.name)}
         <li>
           <button onclick={() => onEntry(entry.name)}>
@@ -69,6 +69,9 @@
 
 <style>
   .review-back { margin: 0 0 12px -8px; }
-  .entries { margin-block: 12px; }
+  h2 { font-size: clamp(26px, 4vw, 36px); }
+  .findings { margin-block: 15px; border-top: 1px solid var(--line); }
+  .findings li { border-bottom: 1px solid var(--line); }
+  .review-clear { color: var(--accent); margin-top: 15px; }
   .error-note { margin-top: 12px; }
 </style>
