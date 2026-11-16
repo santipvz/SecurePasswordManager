@@ -2808,6 +2808,8 @@ name = "secure-password-manager-desktop"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "gio",
+ "rustix",
  "serde",
  "serde_json",
  "tauri",

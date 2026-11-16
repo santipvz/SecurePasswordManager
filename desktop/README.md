@@ -30,7 +30,7 @@ Open **Settings** to save an encrypted backup or open an existing backup as a se
 
 Use **Settings** to register or remove a YubiKey with the current master password. Changing the master password rotates the active vault key and removes the active YubiKey registration. You can then register a key again. Keep the previous unlock method if you need to open an older backup.
 
-Choose **Lock vault** to end the session immediately. The app also locks after five minutes without keyboard or pointer input.
+Choose **Lock vault** to end the session immediately. The app also locks after five minutes without keyboard or pointer input. On Ubuntu it locks on system sleep notifications, and the inactivity timer includes time spent suspended.
 
 ## Develop
 
