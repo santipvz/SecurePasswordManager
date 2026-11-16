@@ -21,15 +21,18 @@ cargo test --locked --features custom-protocol --manifest-path desktop/src-tauri
 
 The first sync installs the locked build backend. The second uses it to build the local project. Commit dependency changes with their corresponding lockfiles. Use `uv lock --upgrade-package <package>` for a targeted Python update. Cargo verifies `Cargo.lock` with `--locked`, and npm verifies `package-lock.json` with `npm ci`.
 
-With [OSV-Scanner v2.7.1](https://github.com/google/osv-scanner/releases/tag/v2.7.1) and [Gitleaks v8.30.1](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1) on your PATH, run these commands. The workflows verify downloaded binaries against pinned checksums.
+With [OSV-Scanner v2.7.1](https://github.com/google/osv-scanner/releases/tag/v2.7.1), [Gitleaks v8.30.1](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1), and [zizmor v1.32.0](https://github.com/zizmorcore/zizmor/releases/tag/v1.32.0) on your PATH, run these commands. The workflows verify downloaded binaries against pinned checksums.
 
 ```sh
+zizmor --offline .github
 bash scripts/scan-dependencies.sh /tmp/spm-dependencies.json
 scan_config=$(mktemp -d)
 printf '[extend]\nuseDefault = true\n' > "$scan_config/gitleaks.toml"
 gitleaks git --redact --no-banner --log-opts='--diff-merges=first-parent HEAD' --config "$scan_config/gitleaks.toml" \
   --gitleaks-ignore-path "$scan_config" --ignore-gitleaks-allow
 ```
+
+Dependabot opens weekly version update PRs on `develop` for GitHub Actions, Python via uv, and npm in `desktop`. Minor and patch updates are grouped within each ecosystem. Version updates use a seven-day cooldown.
 
 ## Review advisories and release
 
