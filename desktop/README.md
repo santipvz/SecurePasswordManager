@@ -71,4 +71,17 @@ npm --prefix desktop run tauri -- bundle --config src-tauri/tauri.ubuntu.conf.js
   --features custom-protocol --bundles deb --ci --no-sign
 ```
 
-The unsigned test package is in `desktop/src-tauri/target/release/bundle/deb/` and is available as the `ubuntu-24.04-amd64-deb` artifact from the Desktop workflow. The workflow installs it in a clean Ubuntu 24.04 container, opens its application menu entry as a standard user, and checks that an upgrade and purge preserve the synthetic vault and its encrypted backup. To test migration from the published beta, pass its verified `.deb` as the second argument to `desktop/scripts/verify_ubuntu_deb.sh` in the container. Test a physical YubiKey in a local Ubuntu desktop session with a disposable vault by registering the key, locking, and unlocking again with the key.
+The unsigned test package is in `desktop/src-tauri/target/release/bundle/deb/` and is available as the `ubuntu-24.04-amd64-deb` artifact from the Desktop workflow. The workflow installs it in a clean Ubuntu 24.04 container, opens its application menu entry as a standard user, and checks that an upgrade and purge preserve the synthetic vault and its encrypted backup. A WebKitWebDriver check uses the installed app as the same user to create a disposable vault and credential, save a backup in the native file picker, lock the vault, and reopen the backup.
+
+Run the container check from the repository root.
+
+```sh
+docker run --rm \
+  -v "$PWD/desktop/src-tauri/target/release/bundle/deb:/packages:ro" \
+  -v "$PWD/desktop/scripts/verify_ubuntu_deb.sh:/tests/desktop/scripts/verify_ubuntu_deb.sh:ro" \
+  -v "$PWD/scripts:/tests/scripts:ro" \
+  ubuntu:24.04@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5 \
+  bash /tests/desktop/scripts/verify_ubuntu_deb.sh /packages
+```
+
+To test migration from the published beta, also mount its verified `.deb` and pass its path in the container as the second argument to the script. Test a physical YubiKey in a local Ubuntu desktop session with a disposable vault by registering the key, locking, and unlocking again with the key.

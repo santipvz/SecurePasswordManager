@@ -1,6 +1,6 @@
 # CI and release checks
 
-GitHub Actions runs the Python suite on Linux, Windows, and macOS. The desktop workflow checks Svelte and TypeScript, builds the frontend, packages the Python core, and tests the Rust bridge using synthetic vaults. The Ubuntu job also measures the optimized desktop build. A separate job on `main` signs build provenance for the verified Ubuntu package.
+GitHub Actions runs the Python suite on Linux, Windows, and macOS. The desktop workflow checks Svelte and TypeScript, builds the frontend, packages the Python core, and tests the Rust bridge using synthetic vaults. The Ubuntu job also measures the optimized desktop build and drives the installed package through creating a vault and credential, locking, and reopening an encrypted backup. A separate job on `main` signs build provenance for the verified Ubuntu package.
 
 ## Reproduce checks
 
