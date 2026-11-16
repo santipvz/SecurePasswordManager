@@ -4,7 +4,9 @@ An offline password generator and encrypted vault for credentials, websites, and
 
 ## Desktop app for Ubuntu
 
-The first desktop beta targets Ubuntu 24.04 LTS on amd64. Download the `.deb` and `SHA256SUMS` from [GitHub Releases](https://github.com/santipvz/SecurePasswordManager/releases). See the [desktop guide](desktop/README.md) for installation, YubiKey unlock, and encrypted backups.
+The desktop installer targets Ubuntu 24.04 LTS on amd64. Download the `.deb` and `SHA256SUMS` from [GitHub Releases](https://github.com/santipvz/SecurePasswordManager/releases). The [desktop guide](desktop/README.md) covers verification, installation, and encrypted backups.
+
+![Secure Password Manager showing an unlocked vault with example credentials and a hidden password](desktop/docs/vault-dark.png)
 
 ## Python edition
 

@@ -1,6 +1,6 @@
 [package]
 name = "secure-password-manager-desktop"
-version = "0.1.1"
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
 
@@ -26,3 +26,7 @@ tokio = { version = "1", features = ["rt", "test-util"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+
+[patch.crates-io]
+# GTK 3 requires glib 0.18. This copy backports RUSTSEC-2024-0429.
+glib = { path = "vendor/glib-0.18.5" }
