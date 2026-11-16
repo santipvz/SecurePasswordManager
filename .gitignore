@@ -1,2 +1,10 @@
 .venv/
 __pycache__/
+*.egg-info/
+build/
+dist/
+*.key
+*.spm
+*.spm.lock
+!/tests/fixtures/password-v1.spm
+!/tests/fixtures/fido2-v2.spm
