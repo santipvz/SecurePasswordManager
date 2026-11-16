@@ -19,6 +19,7 @@ docs="/usr/share/doc/$package"
 vault=/home/ubuntu/.local/share/SecurePasswordManager/vault.spm
 backup=/home/ubuntu/backup.spm
 work=$(mktemp -d)
+ci_scripts=$(realpath "$(dirname "$0")/../../scripts")
 
 test "$(dpkg-deb -f "$package_file" Package)" = "$package"
 test "$(dpkg-deb -f "$package_file" Architecture)" = amd64
@@ -96,6 +97,12 @@ EOF
 jq -se 'length == 4 and .[0].result.unlocked
     and .[1].result.entries == [{"name":"Synthetic account","username":"fixture@example.test","url":""}]
     and .[2].result.unlocked and .[3].result.password == "Synthetic entry secret"' "$work/reopen.jsonl" >/dev/null
+
+# Install test tooling only after checking that the app works without system Python.
+apt-get install -y --no-install-recommends python3 webkit2gtk-driver
+runuser -u ubuntu -- env GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+    xvfb-run -a dbus-run-session -- python3 "$ci_scripts/smoke_installed_desktop.py" \
+    /usr/bin/secure-password-manager-desktop
 
 dpkg --purge "$package"
 test ! -e "$launcher"

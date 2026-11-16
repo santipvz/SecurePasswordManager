@@ -87,9 +87,10 @@ jobs:
         run: |
           docker run --rm \
             -v "$PWD/desktop/src-tauri/target/release/bundle/deb:/packages:ro" \
-            -v "$PWD/desktop/scripts/verify_ubuntu_deb.sh:/verify_ubuntu_deb.sh:ro" \
+            -v "$PWD/desktop/scripts/verify_ubuntu_deb.sh:/tests/desktop/scripts/verify_ubuntu_deb.sh:ro" \
+            -v "$PWD/scripts:/tests/scripts:ro" \
             ubuntu:24.04@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5 \
-            bash /verify_ubuntu_deb.sh /packages
+            bash /tests/desktop/scripts/verify_ubuntu_deb.sh /packages
 
   attest-ubuntu:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -1,5 +1,6 @@
 /node_modules/
 /dist/
+/preview-dist/
 /src-tauri/gen/
 /src-tauri/target/
 /src-tauri/resources/
