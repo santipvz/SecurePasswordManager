@@ -25,24 +25,42 @@ class IdleTimeoutTests(unittest.TestCase):
 
 @unittest.skipIf(tk is None, "Tkinter is unavailable")
 class DesktopLockTests(unittest.TestCase):
-    def test_lock_removes_revealed_password_and_copy_controls(self):
+    def setUp(self):
         try:
-            root = tk.Tk()
+            self.root = tk.Tk()
         except tk.TclError as error:
             self.skipTest(f"No graphical display: {error}")
-        self.addCleanup(root.destroy)
+        self.addCleanup(self.root.destroy)
 
         directory = self.enterContext(tempfile.TemporaryDirectory())
-        path = Path(directory) / "vault.spm"
-        master = "Synthetic desktop test passphrase"
+        self.path = Path(directory) / "vault.spm"
+        self.master = "Synthetic desktop test passphrase"
+        Vault.create(self.path, self.master)
+
+    def test_authentication_begins_a_fresh_session_after_idle_time_on_lock_screen(self):
+        with patch("spm.desktop_interface._session_time", return_value=(10.0, 110.0)) as clock:
+            app = DesktopApp(self.root, self.path)
+            field = next(child for child in app.view.winfo_children() if isinstance(child, ttk.Entry))
+            field.insert(0, self.master)
+            button = next(
+                child for frame in app.view.winfo_children() if isinstance(frame, ttk.Frame)
+                for child in frame.winfo_children()
+                if isinstance(child, ttk.Button) and child.cget("text") == "Unlock"
+            )
+            clock.return_value = (11.0 + LOCK_AFTER, 111.0 + LOCK_AFTER)
+            button.invoke()
+            self.assertIsNotNone(app.vault)
+            app._check_idle()
+            self.assertIsNotNone(app.vault)
+
+    def test_lock_removes_revealed_password_and_copy_controls(self):
         entry = Entry("Sample account", "synthetic sample password")
-        Vault.create(path, master)
-        app = DesktopApp(root, path)
-        app.vault = Vault(path, master)
+        app = DesktopApp(self.root, self.path)
+        app.vault = Vault(self.path, self.master)
         app.vault.add([entry])
         app._show_vault()
         app._refresh(select=entry.name)
-        root.update()
+        self.root.update()
         app._reveal(entry.password)
         self.assertEqual(app.password_display.get(), entry.password)
 

@@ -164,6 +164,11 @@ class DesktopApp:  # pylint: disable=too-many-instance-attributes
         self._show_unlock()
         self.query = self.status = self.password_display = None
 
+    def _activate_vault(self, vault: Vault) -> None:
+        self.last_activity = _session_time()
+        self.vault = vault
+        self._show_vault()
+
     def _show_unlock(self):
         view = self._new_view(centered=True)
         view.columnconfigure(0, weight=1)
@@ -197,15 +202,14 @@ class DesktopApp:  # pylint: disable=too-many-instance-attributes
                     if value != confirmation.get():
                         raise VaultError("The master passwords do not match.")
                     Vault.create(self.path, value)
-                self.vault = Vault(self.path, value)
+                vault = Vault(self.path, value)
             except (OSError, VaultError, ValueError) as problem:
                 error.set(str(problem))
                 return
             finally:
                 master.set("")
                 confirmation.set("")
-            self._record_activity()
-            self._show_vault()
+            self._activate_vault(vault)
 
         buttons = ttk.Frame(view)
         buttons.grid(sticky="ew")
@@ -728,9 +732,7 @@ class DesktopApp:  # pylint: disable=too-many-instance-attributes
                     self._key_settings_saved("FIDO2 key registered.")
                 else:
                     self._close_dialog()
-                    self.vault = value
-                    self._record_activity()
-                    self._show_vault()
+                    self._activate_vault(value)
             except VaultConflict as error:
                 self._conflict(error)
             except (OSError, VaultError, ValueError) as error:
