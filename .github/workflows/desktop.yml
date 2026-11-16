@@ -33,6 +33,8 @@ jobs:
           enable-cache: false
       - run: npm ci
         working-directory: desktop
+      - run: npm test
+        working-directory: desktop
       - run: npm run check
         working-directory: desktop
       - run: npm run build

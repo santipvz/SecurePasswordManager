@@ -28,7 +28,7 @@ def copy_rust_notices(tauri: Path, destination: Path) -> None:
     )
     cargo = json.loads(result.stdout)
     for package in cargo["packages"]:
-        if package["source"] is None:
+        if package["id"] == cargo["resolve"]["root"]:
             continue
         directory = Path(package["manifest_path"]).parent
         target = destination / f"{package['name']}-{package['version']}"

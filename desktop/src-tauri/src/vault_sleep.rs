@@ -108,3 +108,18 @@ pub(crate) fn watch(app: AppHandle, vault: Weak<VaultSession>) {
         app.manage(bus);
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ToVariant;
+
+    #[test]
+    fn glib_string_array_iterator_reads_both_ends() {
+        let values = vec!["first", "second", "third"].to_variant();
+        let mut entries = values.array_iter_str().unwrap();
+        assert_eq!(entries.next(), Some("first"));
+        assert_eq!(entries.next_back(), Some("third"));
+        assert_eq!(entries.next(), Some("second"));
+        assert_eq!(entries.next(), None);
+    }
+}

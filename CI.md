@@ -13,6 +13,7 @@ uv run --no-sync python -m unittest discover -s tests -v
 uv run --no-sync pylint src/spm
 uv run --no-sync python desktop/scripts/bundle_vault.py
 npm ci --prefix desktop
+npm test --prefix desktop
 npm run check --prefix desktop
 npm run build --prefix desktop
 cargo test --locked --features custom-protocol --manifest-path desktop/src-tauri/Cargo.toml
@@ -35,6 +36,8 @@ gitleaks git --redact --no-banner --log-opts='--diff-merges=first-parent HEAD' -
 Use the [threat model](THREAT_MODEL.md) for changes to secret handling, IPC, storage, or hardware access. Link test evidence for the relevant boundary in the PR. Use [private vulnerability reporting](SECURITY.md) for suspected vulnerabilities in the app.
 
 Review the dependency report and verify which versions and platforms each finding affects. Record the upstream reference, affected dependency path, and remediation or tracking decision in the release review. Resolve applicable high and critical findings before release. The dependency job fails for advisory groups with CVSS 7.0 or above or an explicit high or critical severity. Review unscored advisories and report their disposition in the release review. For a confirmed secret, revoke or rotate it and investigate its exposure before release.
+
+See [desktop dependency patches](desktop/DEPENDENCY_PATCHES.md) for backports and their corresponding regression checks.
 
 Require the Python and desktop test evidence, the dependency report, and the secret scan for the release PR into `main`. Confirm the results apply to the release candidate before tagging it. Review new findings from the scheduled scan on `develop` against any published packages they affect.
 
