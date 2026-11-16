@@ -10,6 +10,7 @@ if [[ ${#package_files[@]} != 1 ]]; then
     exit 1
 fi
 package_file=${package_files[0]}
+previous_package=${2:-}
 package=secure-password-manager
 desktop_name='Secure Password Manager'
 launcher="/usr/share/applications/$desktop_name.desktop"
@@ -19,12 +20,21 @@ vault=/home/ubuntu/.local/share/SecurePasswordManager/vault.spm
 backup=/home/ubuntu/backup.spm
 work=$(mktemp -d)
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y --no-install-recommends "$package_file" \
-    dbus-daemon desktop-file-utils jq libgtk-3-bin libgl1-mesa-dri xauth xdotool xvfb
 test "$(dpkg-deb -f "$package_file" Package)" = "$package"
 test "$(dpkg-deb -f "$package_file" Architecture)" = amd64
+version=$(dpkg-deb -f "$package_file" Version)
+initial_package=$package_file
+if [[ -n $previous_package ]]; then
+    test "$(dpkg-deb -f "$previous_package" Package)" = "$package"
+    test "$(dpkg-deb -f "$previous_package" Architecture)" = amd64
+    dpkg --compare-versions "$(dpkg-deb -f "$previous_package" Version)" lt "$version"
+    initial_package=$previous_package
+fi
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y --no-install-recommends "$initial_package" \
+    dbus-daemon desktop-file-utils jq libgtk-3-bin libgl1-mesa-dri xauth xdotool xvfb
 desktop-file-validate "$launcher"
 test -x "$core"
 test -s "$docs/copyright"
@@ -38,12 +48,16 @@ for tool in python3 cargo rustc node npm; do
     fi
 done
 
-runuser -u ubuntu -- env GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 \
-    xvfb-run -a dbus-run-session -- bash -ec '
-        gtk-launch "$1"
-        timeout 20s xdotool search --sync --onlyvisible --name "^$1$" >/dev/null
-    ' bash "$desktop_name"
-echo "The installed desktop launcher opened the application as a standard user."
+launch_desktop() {
+    runuser -u ubuntu -- env GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+        xvfb-run -a dbus-run-session -- bash -ec '
+            gtk-launch "$1"
+            timeout 20s xdotool search --sync --onlyvisible --name "^$1$" >/dev/null
+        ' bash "$desktop_name"
+    echo "The installed desktop launcher opened the application as a standard user."
+}
+
+launch_desktop
 
 runuser -u ubuntu -- "$core" <<'EOF' > "$work/create.jsonl"
 {"version":1,"id":1,"operation":"create","path":"/home/ubuntu/.local/share/SecurePasswordManager/vault.spm","master":"Synthetic vault test password"}
@@ -54,14 +68,23 @@ jq -se 'length == 3 and .[0].result.unlocked and .[1].result.name == "Synthetic 
     "$work/create.jsonl" >/dev/null
 sha256sum "$vault" "$backup" > "$work/vault.sha256"
 
-# Install the same payload with a higher package version to exercise the upgrade path.
-version=$(dpkg-deb -f "$package_file" Version)
-dpkg-deb -R "$package_file" "$work/upgrade"
-sed -i "s/^Version: .*/Version: ${version}+smoke1/" "$work/upgrade/DEBIAN/control"
-dpkg-deb --build --root-owner-group "$work/upgrade" "$work/upgrade.deb" >/dev/null
-dpkg -i "$work/upgrade.deb"
-test "$(dpkg-query -W -f='${Version}' "$package")" = "${version}+smoke1"
+upgrade_package=$package_file
+upgrade_version=$version
+if [[ -z $previous_package ]]; then
+    # Exercise the upgrade path when only the candidate payload is available.
+    upgrade_package=$work/upgrade.deb
+    upgrade_version=${version}+smoke1
+    dpkg-deb -R "$package_file" "$work/upgrade"
+    sed -i "s/^Version: .*/Version: $upgrade_version/" "$work/upgrade/DEBIAN/control"
+    dpkg-deb --build --root-owner-group "$work/upgrade" "$upgrade_package" >/dev/null
+fi
+dpkg -i "$upgrade_package"
+test "$(dpkg-query -W -f='${Version}' "$package")" = "$upgrade_version"
+test -s "$docs/licenses/rust/glib-0.18.5/LICENSE"
 sha256sum --check "$work/vault.sha256"
+if [[ -n $previous_package ]]; then
+    launch_desktop
+fi
 
 runuser -u ubuntu -- "$core" <<'EOF' > "$work/reopen.jsonl"
 {"version":1,"id":1,"operation":"open","master":"Synthetic vault test password"}
