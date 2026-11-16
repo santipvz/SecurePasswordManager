@@ -2,10 +2,10 @@
 
 ## Install on Ubuntu
 
-The Ubuntu preview targets Ubuntu 24.04 LTS on amd64. Download the `ubuntu-24.04-amd64-deb` artifact from a successful Desktop workflow and extract the archive. Run this command from the directory containing the package.
+The desktop beta targets Ubuntu 24.04 LTS on amd64. Download the `.deb` and `SHA256SUMS` from [GitHub Releases](https://github.com/santipvz/SecurePasswordManager/releases). Verify the download and install it from the directory containing both files.
 
 ```sh
-sudo apt install ./*.deb
+sha256sum --check SHA256SUMS && sudo apt install ./secure-password-manager_0.1.0_amd64.deb
 ```
 
 Open **Secure Password Manager** from the applications menu as your normal user. The package includes the vault process and its Python runtime. Use `sudo apt remove secure-password-manager` to uninstall. Ubuntu's package manager leaves vaults and backups in your home directory during upgrades and removal. The default vault lives at `${XDG_DATA_HOME:-$HOME/.local/share}/SecurePasswordManager/vault.spm`.
@@ -63,4 +63,4 @@ npm --prefix desktop run tauri -- bundle --config src-tauri/tauri.ubuntu.conf.js
   --features custom-protocol --bundles deb --ci --no-sign
 ```
 
-The unsigned test package is in `desktop/src-tauri/target/release/bundle/deb/`. The Desktop workflow installs it in a clean Ubuntu 24.04 container, opens its application menu entry as a standard user, and checks that an upgrade and purge preserve the synthetic vault and its encrypted backup. Test a physical YubiKey in a local Ubuntu desktop session with a disposable vault by registering the key, locking, and unlocking again with the key.
+The unsigned test package is in `desktop/src-tauri/target/release/bundle/deb/` and is available as the `ubuntu-24.04-amd64-deb` artifact from the Desktop workflow. The workflow installs it in a clean Ubuntu 24.04 container, opens its application menu entry as a standard user, and checks that an upgrade and purge preserve the synthetic vault and its encrypted backup. Test a physical YubiKey in a local Ubuntu desktop session with a disposable vault by registering the key, locking, and unlocking again with the key.
