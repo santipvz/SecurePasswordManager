@@ -70,7 +70,9 @@ jobs:
       - name: Bundle the Ubuntu desktop
         if: runner.os == 'Linux'
         working-directory: desktop
-        run: npm run tauri -- bundle --config src-tauri/tauri.ubuntu.conf.json --features custom-protocol --bundles deb --ci --no-sign
+        run: |
+          uv run --no-sync python scripts/bundle_notices.py
+          npm run tauri -- bundle --config src-tauri/tauri.ubuntu.conf.json --features custom-protocol --bundles deb --ci --no-sign
       - name: Upload the unsigned Ubuntu test package
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
