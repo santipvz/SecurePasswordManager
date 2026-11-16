@@ -59,6 +59,7 @@ On Ubuntu 24.04 amd64, install the build prerequisites and run the locked setup 
 npm ci --prefix desktop
 npm run build --prefix desktop
 cargo build --release --locked --features custom-protocol --manifest-path desktop/src-tauri/Cargo.toml
+uv run --no-sync python desktop/scripts/bundle_notices.py
 npm --prefix desktop run tauri -- bundle --config src-tauri/tauri.ubuntu.conf.json \
   --features custom-protocol --bundles deb --ci --no-sign
 ```

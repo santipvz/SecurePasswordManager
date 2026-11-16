@@ -3,5 +3,8 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   plugins: [svelte()],
-  build: { target: ["chrome105", "safari16"] },
+  build: {
+    target: ["chrome105", "safari16"],
+    license: { fileName: "frontend-licenses.md" },
+  },
 })

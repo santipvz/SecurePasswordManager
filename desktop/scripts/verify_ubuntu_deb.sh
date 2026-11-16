@@ -14,6 +14,7 @@ package=secure-password-manager
 desktop_name='Secure Password Manager'
 launcher="/usr/share/applications/$desktop_name.desktop"
 core="/usr/lib/$desktop_name/vault-process/cpass-vault-process"
+docs="/usr/share/doc/$package"
 vault=/home/ubuntu/.local/share/SecurePasswordManager/vault.spm
 backup=/home/ubuntu/backup.spm
 work=$(mktemp -d)
@@ -26,6 +27,10 @@ test "$(dpkg-deb -f "$package_file" Package)" = "$package"
 test "$(dpkg-deb -f "$package_file" Architecture)" = amd64
 desktop-file-validate "$launcher"
 test -x "$core"
+test -s "$docs/copyright"
+grep -Fq '@fontsource/inter' "$docs/licenses/frontend.md"
+test -s "$docs/licenses/python/CPython.txt"
+test -d "$docs/licenses/rust"
 for tool in python3 cargo rustc node npm; do
     if command -v "$tool"; then
         echo "Unexpected development tool in clean test environment: $tool" >&2
