@@ -72,7 +72,7 @@ def exercise(driver: WebDriver, directory: Path):
     click(driver, "Save credential")
     driver.wait_for(".credential-list", text=ACCOUNT)
 
-    click(driver, "Settings")
+    click(driver, "Vault settings")
     driver.wait_for("#vault-files-heading")
     click(driver, "Save backup")
     choose_file("Save encrypted backup", backup)
@@ -84,7 +84,7 @@ def exercise(driver: WebDriver, directory: Path):
     assert not driver.execute("return Boolean(document.querySelector('.credential-workspace'))")
     unlock(driver)
 
-    click(driver, "Settings")
+    click(driver, "Vault settings")
     driver.wait_for("#vault-files-heading")
     click(driver, "Open backup")
     choose_file("Open encrypted backup", backup, opening=True)
