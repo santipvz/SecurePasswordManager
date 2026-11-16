@@ -22,6 +22,8 @@ except ImportError:
     tk = None
 
 LOCK_AFTER = 300
+IDLE_CHECK_MS = 250
+SUSPEND_TOLERANCE = 0.05
 CLIPBOARD_AFTER = 30
 REVEAL_AFTER = 15
 BACKGROUND = "#f3f6f5"
@@ -30,6 +32,15 @@ MUTED = "#50625a"
 BORDER = "#acbcb5"
 ACCENT = "#12624e"
 ERROR = "#9d2830"
+
+
+def _session_time() -> tuple[float, float]:
+    running = time.monotonic()
+    if hasattr(time, "CLOCK_BOOTTIME"):
+        elapsed = time.clock_gettime(time.CLOCK_BOOTTIME)
+    else:
+        elapsed = time.time()
+    return running, elapsed
 
 
 def _configure_style(root):
@@ -78,7 +89,7 @@ class DesktopApp:  # pylint: disable=too-many-instance-attributes
         self.vault = None
         self.view = None
         self.dialog = None
-        self.last_activity = time.monotonic()
+        self.last_activity = _session_time()
         self.clipboard_value = None
         self.clipboard_timer = None
         self.reveal_timer = None
@@ -93,15 +104,28 @@ class DesktopApp:  # pylint: disable=too-many-instance-attributes
 
         _configure_style(root)
         self.lock()
-        root.after(1000, self._check_idle)
+        root.after(IDLE_CHECK_MS, self._check_idle)
 
     def _record_activity(self, _event=None):
-        self.last_activity = time.monotonic()
+        current = _session_time()
+        if self._expire_session(current):
+            return "break"
+        self.last_activity = current
+        return None
 
     def _check_idle(self):
-        if self.vault and time.monotonic() - self.last_activity >= LOCK_AFTER:
+        self._expire_session(_session_time())
+        self.root.after(IDLE_CHECK_MS, self._check_idle)
+
+    def _expire_session(self, current):
+        running = current[0] - self.last_activity[0]
+        elapsed = current[1] - self.last_activity[1]
+        if self.vault and (
+            max(running, elapsed) >= LOCK_AFTER or elapsed - running > SUSPEND_TOLERANCE
+        ):
             self.lock()
-        self.root.after(1000, self._check_idle)
+            return True
+        return False
 
     def _clear_clipboard(self):
         if self.clipboard_timer is not None:
@@ -297,7 +321,7 @@ class DesktopApp:  # pylint: disable=too-many-instance-attributes
         return None
 
     def _show_details(self, _event=None):
-        if self.vault is None:
+        if self.vault is None or self._expire_session(_session_time()):
             return
         self._hide_password()
         for widget in self.detail.winfo_children():
@@ -353,6 +377,8 @@ class DesktopApp:  # pylint: disable=too-many-instance-attributes
         ).pack(side="right")
 
     def _copy(self, password, status):
+        if self._expire_session(_session_time()):
+            return
         if not password:
             status.set("Generate a password before copying.")
             return
@@ -375,6 +401,8 @@ class DesktopApp:  # pylint: disable=too-many-instance-attributes
         status.set("Temporary clipboard copy expired.")
 
     def _reveal(self, password):
+        if self._expire_session(_session_time()):
+            return
         if self.reveal_timer is not None:
             self._hide_password()
             return

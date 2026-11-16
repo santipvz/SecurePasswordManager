@@ -11,6 +11,9 @@ use tokio::{
 };
 use zeroize::Zeroizing;
 
+#[cfg(target_os = "linux")]
+use rustix::time::{clock_gettime, ClockId};
+
 use crate::{
     vault_clipboard::VaultClipboard,
     vault_process::{CredentialInput, Error, Operation, Process, Secret},
@@ -26,32 +29,46 @@ struct IdleDeadline {
     running: Instant,
     #[cfg(target_os = "linux")]
     boot: Duration,
+    #[cfg(target_os = "linux")]
+    suspend_offset: Duration,
 }
 
 impl IdleDeadline {
     fn after(timeout: Duration) -> Self {
+        #[cfg(target_os = "linux")]
+        let (monotonic, boot) = (linux_clock(ClockId::Monotonic), boot_time());
         Self {
             running: Instant::now() + timeout,
             #[cfg(target_os = "linux")]
-            boot: boot_time() + timeout,
+            boot: boot + timeout,
+            #[cfg(target_os = "linux")]
+            suspend_offset: boot.saturating_sub(monotonic),
         }
     }
 
     fn elapsed(self) -> bool {
         #[cfg(target_os = "linux")]
-        if boot_time() >= self.boot {
+        if self.elapsed_since_boot(boot_time(), linux_clock(ClockId::Monotonic)) {
             return true;
         }
         Instant::now() >= self.running
+    }
+
+    #[cfg(target_os = "linux")]
+    fn elapsed_since_boot(self, boot: Duration, monotonic: Duration) -> bool {
+        let offset = boot.saturating_sub(monotonic);
+        boot >= self.boot || offset.saturating_sub(self.suspend_offset) > Duration::from_millis(50)
     }
 }
 
 #[cfg(target_os = "linux")]
 fn boot_time() -> Duration {
-    use rustix::time::{clock_gettime, ClockId};
+    linux_clock(ClockId::Boottime)
+}
 
-    // CLOCK_BOOTTIME includes suspend even if logind signals are unavailable.
-    let time = clock_gettime(ClockId::Boottime);
+#[cfg(target_os = "linux")]
+fn linux_clock(clock: ClockId) -> Duration {
+    let time = clock_gettime(clock);
     Duration::new(time.tv_sec as u64, time.tv_nsec as u32)
 }
 
@@ -81,6 +98,7 @@ struct Session {
     generation: u64,
     deadline: Option<IdleDeadline>,
     closed: bool,
+    sleeping: bool,
     selection: Selection,
     choosing: bool,
 }
@@ -292,6 +310,7 @@ impl VaultSession {
         let mut generation = Err(Error::Locked);
         self.state.send_if_modified(|state| {
             if state.closed
+                || state.sleeping
                 || state.deadline.is_some()
                 || expected.is_some_and(|generation| generation != state.generation)
             {
@@ -319,8 +338,20 @@ impl VaultSession {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn lock_for_sleep(&self) {
-        self.invalidate(None, false);
+    pub(crate) fn system_sleep(&self, sleeping: bool) {
+        self.state.send_if_modified(|state| {
+            if state.closed {
+                return false;
+            }
+            // Also invalidate on a wake-only notification if preparation was missed.
+            if sleeping || !state.sleeping {
+                state.generation += 1;
+                state.deadline = None;
+                state.choosing = false;
+            }
+            state.sleeping = sleeping;
+            true
+        });
     }
 
     pub(crate) fn close(&self) {
@@ -639,6 +670,7 @@ impl VaultSession {
                 || state.generation != generation
                 || expected.is_some_and(|expected| expected != generation)
                 || (operation.requires_session() && state.deadline.is_none())
+                || (state.sleeping && !matches!(operation, Operation::Status))
             {
                 return Err(Error::Locked);
             }
@@ -728,6 +760,7 @@ fn keep_process(error: Error, credential_request: bool) -> bool {
                 Error::EntryMissing
                     | Error::EntryDuplicate
                     | Error::EntryInvalid
+                    | Error::EntryEncoding
                     | Error::WriteConflict
                     | Error::BackupFailed
                     | Error::ImportFailed

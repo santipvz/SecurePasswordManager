@@ -95,7 +95,9 @@ def _parser() -> argparse.ArgumentParser:
     reveal.add_argument(
         "--password", action="store_true", help="write the password to standard output",
     )
-    reveal.add_argument("--notes", action="store_true", help="include sensitive notes in the output")
+    reveal.add_argument(
+        "--notes", action="store_true", help="include sensitive notes in the output",
+    )
     delete = actions.add_parser("delete", help="delete a credential")
     delete.add_argument("name")
     delete.add_argument("--yes", "-y", action="store_true", help="confirm deletion")

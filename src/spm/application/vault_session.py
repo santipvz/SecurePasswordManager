@@ -7,11 +7,36 @@ from ..domain.credentials import Entry, VaultError
 from .ports import KeyEnrollment, SecurityKey, UnlockState, VaultCodec, VaultStorage
 
 MIN_MASTER_LENGTH = 15
+PREDICTABLE_MASTERS = {
+    "correcthorsebatterystaple",
+    "letmein123456789",
+    "password123456789",
+    "qwertyuiopasdfghjkl",
+    "1234567890abcdef",
+}
+
+
+class WeakMaster(VaultError):
+    """A new master password does not meet the local policy."""
 
 
 def _validate_master(master: str) -> None:
     if len(master) < MIN_MASTER_LENGTH or not master.strip():
-        raise VaultError(f"Use at least {MIN_MASTER_LENGTH} characters for the master password.")
+        raise WeakMaster(f"Use at least {MIN_MASTER_LENGTH} characters for the master password.")
+    normalized = "".join(master.casefold().split())
+    digits = "0123456789"
+    ascending = digits * (2 + len(normalized) // len(digits))
+    if (
+        len(normalized) < 8
+        or normalized in PREDICTABLE_MASTERS
+        or normalized in ascending
+        or normalized in ascending[::-1]
+        or any(normalized == (normalized[:size] * (len(normalized) // size + 1))[:len(normalized)]
+               for size in range(1, min(8, len(normalized) // 2) + 1))
+    ):
+        raise WeakMaster(
+            "Choose a less predictable master password or a randomly generated passphrase."
+        )
 
 
 def create_vault(storage: VaultStorage, codec: VaultCodec, master: str) -> None:
@@ -59,6 +84,7 @@ class VaultSession:
         """Add a batch of credentials as a single update."""
         updated = self._entries.copy()
         for entry in entries:
+            entry.validate_text()
             index = entry.name.casefold()
             if index in updated:
                 raise VaultError(f"A credential named {entry.name!r} already exists.")
@@ -67,7 +93,9 @@ class VaultSession:
 
     def edit(self, name: str, entry: Entry) -> None:
         """Replace a credential, optionally changing its name."""
-        index = self.get(name).name.casefold()
+        previous = self.get(name)
+        entry.validate_text(previous)
+        index = previous.name.casefold()
         updated = self._entries.copy()
         del updated[index]
         new_index = entry.name.casefold()
@@ -92,7 +120,6 @@ class VaultSession:
         if self.has_security_key:
             raise VaultError("Remove the registered FIDO2 key before adding another.")
         self.verify_master(master)
-        _validate_master(master)
         self._commit(self._entries, self._codec.new_state(master, enrollment))
 
     def remove_security_key(self, master: str) -> None:
@@ -100,7 +127,7 @@ class VaultSession:
         if not self.has_security_key:
             raise VaultError("This vault has no registered FIDO2 key.")
         self.verify_master(master)
-        self.change_master(master)
+        self._commit(self._entries, self._codec.new_state(master))
 
     def verify_master(self, master: str) -> None:
         """Require the master password for this unlocked snapshot again."""

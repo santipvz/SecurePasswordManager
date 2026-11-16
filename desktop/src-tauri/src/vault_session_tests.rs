@@ -304,7 +304,7 @@ async fn system_sleep_invalidates_the_session_and_cancels_pending_reads() {
     });
     wait_for_file(&dir.path().join("started")).await;
 
-    session.lock_for_sleep();
+    session.system_sleep(true);
     assert!(!session.active(generation));
     session.stop_stale().await;
     assert_eq!(pending.await.unwrap(), Err(Error::Locked));
@@ -315,6 +315,11 @@ async fn system_sleep_invalidates_the_session_and_cancels_pending_reads() {
     );
     let next = session.status().await.unwrap().generation;
     assert_ne!(next, generation);
+    assert_eq!(
+        session.unlock(next, MASTER.to_owned().into()).await.err(),
+        Some(Error::Locked)
+    );
+    session.system_sleep(false);
     session
         .unlock(next, MASTER.to_owned().into())
         .await
@@ -337,6 +342,10 @@ async fn suspend_time_expires_an_idle_session_without_a_system_notification() {
     session.state.send_modify(|state| {
         let deadline = state.deadline.as_mut().unwrap();
         assert!(Instant::now() < deadline.running);
+        let monotonic = linux_clock(ClockId::Monotonic);
+        let after_short_sleep = monotonic + deadline.suspend_offset + Duration::from_secs(1);
+        assert!(after_short_sleep < deadline.boot);
+        assert!(deadline.elapsed_since_boot(after_short_sleep, monotonic));
         deadline.boot = boot_time();
     });
     session.activity(generation);
