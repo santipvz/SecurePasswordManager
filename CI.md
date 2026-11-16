@@ -1,6 +1,6 @@
 # CI and release checks
 
-GitHub Actions runs the Python suite on Linux, Windows, and macOS. The desktop workflow checks Svelte and TypeScript, builds the frontend, packages the Python core, and tests the Rust bridge using synthetic vaults. The Ubuntu job also measures the optimized desktop build. Workflow jobs use read-only repository access.
+GitHub Actions runs the Python suite on Linux, Windows, and macOS. The desktop workflow checks Svelte and TypeScript, builds the frontend, packages the Python core, and tests the Rust bridge using synthetic vaults. The Ubuntu job also measures the optimized desktop build. A separate job on `main` signs build provenance for the verified Ubuntu package.
 
 ## Reproduce checks
 
@@ -37,6 +37,8 @@ Use the [threat model](THREAT_MODEL.md) for changes to secret handling, IPC, sto
 Review the dependency report and verify which versions and platforms each finding affects. Record the upstream reference, affected dependency path, and remediation or tracking decision in the release review. Resolve applicable high and critical findings before release. The dependency job fails for advisory groups with CVSS 7.0 or above or an explicit high or critical severity. Review unscored advisories and report their disposition in the release review. For a confirmed secret, revoke or rotate it and investigate its exposure before release.
 
 Require the Python and desktop test evidence, the dependency report, and the secret scan for the release PR into `main`. Confirm the results apply to the release candidate before tagging it. Review new findings from the scheduled scan on `develop` against any published packages they affect.
+
+After merging the release PR, download the `ubuntu-release` artifact from the successful Desktop run for the exact `main` commit. Verify `SHA256SUMS` and use `gh attestation verify` with the repository, source ref `refs/heads/main`, and source digest of that commit. Upload the verified installer, checksum, and signed provenance to a draft GitHub release before publishing the immutable release.
 
 ## Measure the desktop on Ubuntu
 

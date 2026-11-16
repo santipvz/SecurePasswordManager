@@ -5,7 +5,10 @@
 The desktop beta targets Ubuntu 24.04 LTS on amd64. Download the `.deb` and `SHA256SUMS` from [GitHub Releases](https://github.com/santipvz/SecurePasswordManager/releases). Verify the download and install it from the directory containing both files.
 
 ```sh
-sha256sum --check SHA256SUMS && sudo apt install ./secure-password-manager_0.1.0_amd64.deb
+sha256sum --check SHA256SUMS &&
+  gh attestation verify secure-password-manager_0.1.1_amd64.deb \
+    --repo santipvz/SecurePasswordManager --source-ref refs/heads/main &&
+  sudo apt install ./secure-password-manager_0.1.1_amd64.deb
 ```
 
 Open **Secure Password Manager** from the applications menu as your normal user. The package includes the vault process and its Python runtime. Use `sudo apt remove secure-password-manager` to uninstall. Ubuntu's package manager leaves vaults and backups in your home directory during upgrades and removal. The default vault lives at `${XDG_DATA_HOME:-$HOME/.local/share}/SecurePasswordManager/vault.spm`.
@@ -30,7 +33,7 @@ Open **Settings** to save an encrypted backup or open an existing backup as a se
 
 Use **Settings** to register or remove a YubiKey with the current master password. Changing the master password rotates the active vault key and removes the active YubiKey registration. You can then register a key again. Keep the previous unlock method if you need to open an older backup.
 
-Choose **Lock vault** to end the session immediately. The app also locks after five minutes without keyboard or pointer input. On Ubuntu it locks on system sleep notifications, and the inactivity timer includes time spent suspended.
+Choose **Lock vault** to end the session immediately. The app also locks after five minutes without keyboard or pointer input. On Ubuntu the app uses logind's delay inhibitor to lock before system sleep and checks for elapsed suspend time when logind is unavailable.
 
 ## Develop
 
