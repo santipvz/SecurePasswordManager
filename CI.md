@@ -42,9 +42,13 @@ Review the dependency report and verify which versions and platforms each findin
 
 See [desktop dependency patches](desktop/DEPENDENCY_PATCHES.md) for backports and their corresponding regression checks.
 
-Require the Python and desktop test evidence, the dependency report, and the secret scan for the release PR into `main`. Confirm the results apply to the release candidate before tagging it. Review new findings from the scheduled scan on `develop` against any published packages they affect.
+Require the Python and desktop test evidence, the workflow audit, the dependency report, and the secret scan for the release PR into `main`. Confirm the results apply to the release candidate before tagging it. Review new findings from the scheduled scan on `develop` against any published packages they affect.
 
 After merging the release PR, download the `ubuntu-release` artifact from the successful Desktop run for the exact `main` commit. Verify `SHA256SUMS` and use `gh attestation verify` with the repository, source ref `refs/heads/main`, and source digest of that commit. Upload the verified installer, checksum, and signed provenance to a draft GitHub release before publishing the immutable release.
+
+## Publish the browser demo
+
+The Browser preview workflow builds `desktop/preview-dist` on pull requests. It publishes the demo to GitHub Pages from `develop` in this repository. In the repository's **Settings → Pages**, use **GitHub Actions** as the source. Run **Browser preview** on `develop` to redeploy the current branch.
 
 ## Measure the desktop on Ubuntu
 

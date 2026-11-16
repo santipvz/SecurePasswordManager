@@ -1,0 +1,28 @@
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.preview-notice {
+  padding: 8px 16px;
+  background: #14243d;
+  color: #f2f6ff;
+  text-align: center;
+  font: 14px/1.5 Inter, system-ui, sans-serif;
+}
+
+.preview-notice code { color: #afc8ff; }
+
+#app {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+#app .desktop-app,
+#app .desktop-welcome,
+#app .vault-shell { min-height: 100%; }
+
+#app .vault-shell { height: 100%; }

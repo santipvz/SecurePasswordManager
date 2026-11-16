@@ -54,7 +54,9 @@ npm run tauri dev
 
 On Debian with system Python 3.11, install `libpython3.11` for PyInstaller. Rebuild the vault process after changing the Python core. See [CI checks](../CI.md) for the current uv version and performance commands.
 
-From this directory, run `npm run dev` and open [the desktop interface preview](http://127.0.0.1:1420/preview/). Unlock the fictional vault with `preview-password` or choose **YubiKey** and use the demo PIN `123456`. The preview renders the Tauri interface with in-memory data and simulated commands. Reloading restores the examples. The separate browser demo is at [the root URL](http://127.0.0.1:1420/).
+Open the [published browser demo](https://santipvz.github.io/SecurePasswordManager/), or run `npm run dev` from this directory and open the [local interface preview](http://127.0.0.1:1420/preview/). Unlock the fictional vault with `preview-password` or choose **YubiKey** and use the demo PIN `123456`. The preview renders the desktop interface with in-memory data and simulated commands. Reloading restores the examples.
+
+Run `npm run build:preview` to build the demo into `preview-dist`. To serve that build locally, run `npm exec -- vite preview --config vite.preview.config.ts --host 127.0.0.1`.
 
 `npm run check` checks Svelte and TypeScript, and `npm run build` bundles the local frontend assets. Run `cargo test --locked --features custom-protocol --manifest-path src-tauri/Cargo.toml` after building both the vault process and frontend to test the bridge. See the [visual system](DESIGN.md) for review scenarios and interface conventions.
 

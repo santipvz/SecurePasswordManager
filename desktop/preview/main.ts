@@ -7,10 +7,11 @@ import "@fontsource/inter/latin-700.css"
 import { mount } from "svelte"
 import VaultSession from "../src/VaultSession.svelte"
 import "../src/styles.css"
+import "./style.css"
 import { createPreviewVault } from "./vault"
 
-if (!import.meta.env.DEV || "isTauri" in window || "__TAURI_INTERNALS__" in window) {
-  throw new Error("The interface preview requires a browser and the development server.")
+if ("isTauri" in window || "__TAURI_INTERNALS__" in window) {
+  throw new Error("The interface preview runs in a browser.")
 }
 
 // This entry point isn't referenced by the application bundle. The fixture
