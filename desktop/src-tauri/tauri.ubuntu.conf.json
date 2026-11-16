@@ -7,6 +7,10 @@
     "linux": {
       "deb": {
         "section": "utils",
+        "files": {
+          "/usr/share/doc/secure-password-manager/copyright": "../../LICENSE",
+          "/usr/share/doc/secure-password-manager/licenses": "resources/notices"
+        },
         "depends": ["libc6 (>= 2.39)", "xdg-desktop-portal-gtk"]
       }
     }

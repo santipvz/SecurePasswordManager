@@ -78,6 +78,38 @@ class ConsoleTests(unittest.TestCase):
         self.assertIn("hide password input", errors.getvalue())
         self.assertFalse(Path(self.vault).exists())
 
+    def test_notes_use_hidden_input_and_can_be_preserved_or_cleared(self):
+        path = Path(self.vault)
+        Vault.create(path, MASTER)
+        notes = "synthetic recovery note"
+        code, output, errors = self.run_command(
+            "add", "Correo", "--prompt-notes", secrets=(MASTER, PASSWORD, notes),
+        )
+        self.assertEqual(code, 0)
+        self.assertNotIn(notes, output + errors)
+        self.assertEqual(Vault(path, MASTER).get("Correo").notes, notes)
+
+        code, _, _ = self.run_command("edit", "Correo", "--username", "ana", secrets=(MASTER,))
+        self.assertEqual(code, 0)
+        self.assertEqual(Vault(path, MASTER).get("Correo").notes, notes)
+
+        code, _, _ = self.run_command("edit", "Correo", "--prompt-notes", secrets=(MASTER, ""))
+        self.assertEqual(code, 0)
+        self.assertEqual(Vault(path, MASTER).get("Correo").notes, "")
+
+    def test_legacy_notes_argument_is_rejected_without_echoing_the_value(self):
+        notes = "synthetic recovery note"
+        for arguments in (("--notes", notes), (f"--notes={notes}",)):
+            with (
+                self.subTest(arguments=arguments),
+                contextlib.redirect_stderr(io.StringIO()) as errors,
+            ):
+                with self.assertRaises(SystemExit) as stopped:
+                    main(["--vault", self.vault, "add", "Correo", *arguments])
+                self.assertEqual(stopped.exception.code, 2)
+                self.assertIn("use --prompt-notes", errors.getvalue())
+                self.assertNotIn(notes, errors.getvalue())
+
     def test_audit_reports_findings_without_exposing_or_writing_passwords(self):
         path = Path(self.vault)
         Vault.create(path, MASTER)

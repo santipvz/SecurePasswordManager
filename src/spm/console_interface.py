@@ -49,11 +49,18 @@ def _generator_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-symbols", action="store_true", help="use letters and numbers only")
 
 
+def _reject_notes_argument(_value: str) -> None:
+    raise argparse.ArgumentTypeError("use --prompt-notes to enter notes privately")
+
+
 def _entry_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("name", help="credential name")
     parser.add_argument("--username", "-u", help="username or email")
     parser.add_argument("--url", help="website")
-    parser.add_argument("--notes", help="notes visible in the terminal history")
+    parser.add_argument("--notes", type=_reject_notes_argument, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--prompt-notes", action="store_true", help="enter notes without displaying them",
+    )
     password = parser.add_mutually_exclusive_group()
     password.add_argument("--generate", action="store_true", help="generate a new password")
     password.add_argument(
@@ -108,9 +115,11 @@ def _entry(args: argparse.Namespace, current: Entry | None = None) -> Entry:
     else:
         password = current.password
     fields = {
-        name: getattr(args, name) for name in ("username", "url", "notes")
+        name: getattr(args, name) for name in ("username", "url")
         if getattr(args, name) is not None
     }
+    if args.prompt_notes:
+        fields["notes"] = _secret("Credential notes: ")
     if current is None:
         return Entry(name=args.name, password=password, **fields)
     name = current.name if args.new_name is None else args.new_name
