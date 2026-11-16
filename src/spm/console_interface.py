@@ -89,11 +89,13 @@ def _parser() -> argparse.ArgumentParser:
     listing = actions.add_parser("list", help="list or search credentials")
     listing.add_argument("query", nargs="?", default="")
     actions.add_parser("audit", help="review short and reused passwords")
-    show = actions.add_parser("show", help="show credential details")
+    show = actions.add_parser("show", help="show credential details", allow_abbrev=False)
     show.add_argument("name")
-    show.add_argument(
+    reveal = show.add_mutually_exclusive_group()
+    reveal.add_argument(
         "--password", action="store_true", help="write the password to standard output",
     )
+    reveal.add_argument("--notes", action="store_true", help="include sensitive notes in the output")
     delete = actions.add_parser("delete", help="delete a credential")
     delete.add_argument("name")
     delete.add_argument("--yes", "-y", action="store_true", help="confirm deletion")
@@ -126,13 +128,13 @@ def _entry(args: argparse.Namespace, current: Entry | None = None) -> Entry:
     return replace(current, name=name, password=password, **fields)
 
 
-def _show(entry: Entry, reveal: bool) -> None:
-    if reveal:
+def _show(entry: Entry, *, password: bool, notes: bool) -> None:
+    if password:
         print(_visible(entry.password) if sys.stdout.isatty() else entry.password)
     else:
         for label, value in (
             ("Name", entry.name), ("Username", entry.username),
-            ("Website", entry.url), ("Notes", entry.notes),
+            ("Website", entry.url), ("Notes", entry.notes if notes else ""),
         ):
             if value:
                 print(f"{label}: {_visible(value)}")
@@ -187,7 +189,7 @@ def _manage(vault: Vault, args: argparse.Namespace) -> None:
         case "audit":
             _audit(vault)
         case "show":
-            _show(vault.get(args.name), args.password)
+            _show(vault.get(args.name), password=args.password, notes=args.notes)
         case "delete":
             entry = vault.get(args.name)
             if not args.yes:

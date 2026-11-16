@@ -61,7 +61,7 @@ cpass change-master
 
 Omit `--generate` from `cpass add` to enter an account password without echo. Use `--prompt-password` to enter a replacement password with `cpass edit`. The `cpass show --password` command writes a password to standard output.
 
-Use `--prompt-notes` with `cpass add` or `cpass edit` to enter notes without echo. On edit, omit the flag to keep the current notes or submit an empty value at the prompt to clear them.
+Use `--prompt-notes` with `cpass add` or `cpass edit` to enter notes without echo. On edit, omit the flag to keep the current notes or submit an empty value at the prompt to clear them. Use `cpass show "Personal email" --notes` to include sensitive notes on standard output.
 
 Import previous `.key` files with **File → Import .key files…** or `cpass import-key first.key second.key`. The import uses filenames as credential names. A duplicate or invalid file cancels the whole batch. The original files remain on disk in plaintext.
 
