@@ -3,6 +3,7 @@
 import argparse
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from desktop_webdriver import WebDriver, running_driver
@@ -40,9 +41,13 @@ def choose_file(title: str, path: Path, *, opening: bool = False):
     ).splitlines()[0]
     subprocess.run(["xdotool", "windowfocus", "--sync", window], check=True, timeout=5)
     if opening:
+        # GTK creates the location entry asynchronously and completes paths as they are typed.
         subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+l"], check=True)
+        time.sleep(0.3)
     subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+a"], check=True)
     subprocess.run(["xdotool", "type", "--clearmodifiers", str(path)], check=True)
+    if opening:
+        time.sleep(0.3)
     subprocess.run(["xdotool", "key", "--clearmodifiers", "Return"], check=True)
 
 
