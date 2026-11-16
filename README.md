@@ -26,6 +26,7 @@ In PowerShell, activate the environment with `.venv\Scripts\Activate.ps1`. On De
 3. Search by name, username, or website. Select a credential to copy its password, reveal it for 15 seconds, edit it, or delete it.
 
 The app attempts to clear the clipboard after 30 seconds if it still contains the copied password. **Lock** ends the session immediately. The vault also locks after five minutes of inactivity.
+On Linux, the Python desktop app checks for suspension before extending an unlocked session.
 
 **Review vault** groups accounts that share a password and flags passwords shorter than 15 characters. The report runs locally, lists credential names, and provides a shortcut to the selected account. [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver)
 
@@ -61,7 +62,7 @@ cpass change-master
 
 Omit `--generate` from `cpass add` to enter an account password without echo. Use `--prompt-password` to enter a replacement password with `cpass edit`. The `cpass show --password` command writes a password to standard output.
 
-Use `--prompt-notes` with `cpass add` or `cpass edit` to enter notes without echo. On edit, omit the flag to keep the current notes or submit an empty value at the prompt to clear them.
+Use `--prompt-notes` with `cpass add` or `cpass edit` to enter notes without echo. On edit, omit the flag to keep the current notes or submit an empty value at the prompt to clear them. Use `cpass show "Personal email" --notes` to include sensitive notes on standard output.
 
 Import previous `.key` files with **File → Import .key files…** or `cpass import-key first.key second.key`. The import uses filenames as credential names. A duplicate or invalid file cancels the whole batch. The original files remain on disk in plaintext.
 
@@ -69,7 +70,9 @@ Import previous `.key` files with **File → Import .key files…** or `cpass im
 
 - Passwords are generated with Python's `secrets` module. The default is 24 characters and the supported range is 12 to 256. [Python secrets documentation](https://docs.python.org/3/library/secrets.html)
 - Argon2id derives a 256-bit key with a 16-byte random salt, 64 MiB of memory, three passes, and four lanes. AES-256-GCM authenticates and encrypts the vault, including credential names and notes. Each write uses a fresh nonce. [RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html), [AES-GCM documentation](https://cryptography.io/en/latest/hazmat/primitives/aead/#cryptography.hazmat.primitives.ciphers.aead.AESGCM)
+- New master passwords must use at least 15 characters and pass a local check for common passwords and simple sequences. Existing master passwords still unlock their vaults.
 - Both existing `.spm` versions remain supported. Version 1 uses the master password and version 2 adds a copy of the data key protected by FIDO2 PRF. A change to format or derivation parameters requires a new version and a compatibility test. [WebAuthn PRF](https://www.w3.org/TR/webauthn-3/#prf-extension)
+- Older credential metadata with invalid Unicode is displayed using visible escapes. Edit the affected credential to replace those characters. For a legacy password with invalid Unicode, enter a replacement in the editor.
 - The application checks for concurrent changes before atomically replacing the vault file. Use a private directory on a local filesystem. The vault protects data at rest. A compromised computer or clipboard history can expose data while it is in use. The project has yet to undergo an independent security audit.
 
 ## Development

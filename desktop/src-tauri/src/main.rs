@@ -4,6 +4,8 @@ mod vault_clipboard;
 mod vault_dialog;
 mod vault_process;
 mod vault_session;
+#[cfg(target_os = "linux")]
+mod vault_sleep;
 
 use std::sync::Arc;
 
@@ -274,6 +276,8 @@ fn main() {
             app.manage(Arc::clone(&vault));
             let session_monitor = Arc::clone(&vault);
             tauri::async_runtime::spawn(async move { session_monitor.monitor().await });
+            #[cfg(target_os = "linux")]
+            vault_sleep::watch(app.handle().clone(), Arc::downgrade(&vault));
             tauri::async_runtime::spawn(async move { vault.monitor_clipboard().await });
             WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
                 .on_navigation(local_navigation)

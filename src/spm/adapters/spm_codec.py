@@ -1,7 +1,7 @@
 """The authenticated SPM v1 and v2 file formats."""
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from secrets import compare_digest, token_bytes
 
 from argon2.low_level import Type, hash_secret_raw
@@ -117,6 +117,33 @@ def _split_vault(data: bytes) -> _EncryptedVault:
     return _EncryptedVault(salt, slot, data[:header_end], data[header_end:])
 
 
+def _escape_legacy_text(value: str) -> str:
+    # Older versions could save lone surrogates through the CLI. Preserve their
+    # representation as visible escapes so native clients can read the record.
+    return value.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
+def _recover_metadata(entries: dict[str, Entry]) -> dict[str, Entry]:
+    occupied = set(entries)
+    recovered = {}
+    for entry in entries.values():
+        escaped = _escape_legacy_text(entry.name)
+        name = escaped
+        if name != entry.name:
+            suffix = 2
+            while name.casefold() in occupied:
+                name = f"{escaped} ({suffix})"
+                suffix += 1
+            occupied.add(name.casefold())
+        username = _escape_legacy_text(entry.username)
+        url = _escape_legacy_text(entry.url)
+        notes = _escape_legacy_text(entry.notes)
+        if (name, username, url, notes) != (entry.name, entry.username, entry.url, entry.notes):
+            entry = replace(entry, name=name, username=username, url=url, notes=notes)
+        recovered[name.casefold()] = entry
+    return recovered
+
+
 def _decrypt(encrypted: _EncryptedVault, key: bytes, error_message: str) -> dict[str, Entry]:
     try:
         header = encrypted.header
@@ -136,7 +163,7 @@ def _decrypt(encrypted: _EncryptedVault, key: bytes, error_message: str) -> dict
             entries[index] = entry
     except (TypeError, ValueError, RecursionError, VaultError) as error:
         raise VaultError("Damaged or unsupported vault contents.") from error
-    return entries
+    return _recover_metadata(entries)
 
 
 

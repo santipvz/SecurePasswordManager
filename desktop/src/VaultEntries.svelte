@@ -25,6 +25,7 @@
     entry_missing: "This credential no longer exists.",
     entry_duplicate: "A credential with this name already exists.",
     entry_invalid: "Enter a name and password.",
+    entry_encoding: "This credential contains invalid text. Edit the entry to replace the affected field.",
     input_too_large: "This credential is too large to save.",
     write_conflict: "The vault changed in another app. Lock and reopen it before saving.",
     write_failed: "Could not confirm the save. Reopen the vault to check whether it was applied.",

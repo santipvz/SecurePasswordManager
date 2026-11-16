@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from spm.adapters.spm_codec import SpmCodec
 from spm.vault import Entry, Vault, VaultConflict, VaultError, read_legacy
 
 MASTER = "Una frase de prueba larga"
@@ -101,6 +102,22 @@ class VaultTests(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), original)
         with self.assertRaisesRegex(VaultError, "15 characters"):
             Vault.create(self.path.with_name("new.spm"), "too short")
+
+    def test_predictable_new_masters_are_rejected_without_blocking_old_vaults(self):
+        for weak in ("123456789012345", "987654321098765", "abcabcabcabcabc",
+                     "password123456789", "a" * 15):
+            with self.subTest(weak=weak):
+                with self.assertRaisesRegex(VaultError, "less predictable"):
+                    Vault.create(self.path.with_name("new.spm"), weak)
+                with self.assertRaisesRegex(VaultError, "less predictable"):
+                    self.vault.change_master(weak)
+        old = self.path.with_name("old.spm")
+        old_master = "123456789012345"
+        old.write_bytes(SpmCodec.seal({ENTRY.name.casefold(): ENTRY}, SpmCodec.new_state(old_master)))
+        vault = Vault(old, old_master)
+        self.assertEqual(vault.get(ENTRY.name), ENTRY)
+        vault.change_master(NEW_MASTER)
+        self.assertEqual(Vault(old, NEW_MASTER).get(ENTRY.name), ENTRY)
 
     @unittest.skipUnless(os.name == "posix", "POSIX hard-link fallback")
     def test_backup_on_filesystems_without_hard_links(self):

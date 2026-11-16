@@ -38,7 +38,7 @@
     entry_duplicate: "An imported name conflicts with another credential. Rename the .key file and retry.",
     write_conflict: "The vault changed in another app. Lock and reopen it before trying again.",
     incorrect_master: "The current master password is incorrect.",
-    weak_master: "Use at least 15 characters for the new master password.",
+    weak_master: "Choose a less predictable master password of at least 15 characters.",
     already_registered: "A YubiKey is already registered.",
     no_registered_key: "There is no YubiKey registered for this vault.",
     key_disconnected: "Connect your YubiKey and check that the system can access it.",

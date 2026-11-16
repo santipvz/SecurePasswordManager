@@ -89,6 +89,13 @@ class ConsoleTests(unittest.TestCase):
         self.assertNotIn(notes, output + errors)
         self.assertEqual(Vault(path, MASTER).get("Correo").notes, notes)
 
+        code, output, errors = self.run_command("show", "Correo", secrets=(MASTER,))
+        self.assertEqual((code, output, errors), (0, "Name: Correo\n", ""))
+        code, output, errors = self.run_command("show", "Correo", "--notes", secrets=(MASTER,))
+        self.assertEqual((code, output, errors), (0, f"Name: Correo\nNotes: {notes}\n", ""))
+        code, output, errors = self.run_command("show", "Correo", "--password", secrets=(MASTER,))
+        self.assertEqual((code, output, errors), (0, PASSWORD + "\n", ""))
+
         code, _, _ = self.run_command("edit", "Correo", "--username", "ana", secrets=(MASTER,))
         self.assertEqual(code, 0)
         self.assertEqual(Vault(path, MASTER).get("Correo").notes, notes)
