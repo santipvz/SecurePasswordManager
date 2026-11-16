@@ -30,7 +30,7 @@
     invalid_file: "Choose a file with the .spm extension.",
     dialog_failed: "Could not open the file dialog. Try again.",
     create_failed: "Could not create the vault. Choose a new file in a writable folder.",
-    weak_master: "Use at least 15 characters for the master password.",
+    weak_master: "Choose a less predictable master password of at least 15 characters.",
     key_disconnected: "Connect the key and check that the system can access it.",
     key_failed: "Could not unlock with this key. Check the key and vault, or use the master password.",
     key_interrupted: "The security key request timed out or was cancelled.",

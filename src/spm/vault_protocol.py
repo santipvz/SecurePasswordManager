@@ -10,6 +10,8 @@ from queue import Queue
 from threading import Event, Thread
 from typing import BinaryIO
 
+from .application.vault_session import WeakMaster
+from .domain.credentials import EntryEncodingError, require_utf8
 from .domain.review import MIN_REVIEW_LENGTH, review_credentials
 from .sec_pass_manager import MAX_LENGTH, MIN_LENGTH, generate_password
 from .security_key import SecurityKeyError, open_security_key
@@ -66,7 +68,9 @@ ERROR_MESSAGES = {
     "open_failed": "Could not unlock the vault. Check the password and file.",
     "file_error": "The vault file could not be accessed.",
     "create_failed": "Could not create a vault. Choose a new file in a writable folder.",
-    "weak_master": f"Use at least {MIN_MASTER_LENGTH} characters for the master password.",
+    "weak_master": (
+        f"Choose a less predictable master password of at least {MIN_MASTER_LENGTH} characters."
+    ),
     "key_disconnected": "Connect a FIDO2 key and check its permissions.",
     "key_failed": "Could not unlock with this key. Check the vault or use the master password.",
     "key_interrupted": "The FIDO2 operation timed out or was cancelled.",
@@ -81,6 +85,7 @@ ERROR_MESSAGES = {
     "entry_missing": "The credential no longer exists.",
     "entry_duplicate": "A credential with that name already exists.",
     "entry_invalid": "Enter a name and password for the credential.",
+    "entry_encoding": "Replace the credential field that contains invalid UTF-8 text.",
     "write_conflict": "The vault changed on disk. Lock and reopen it before making changes.",
     "backup_failed": "Could not save the backup. Choose a new file in a writable folder.",
     "import_failed": "Could not import the selected files. Check their format and names.",
@@ -198,11 +203,11 @@ class _Session:
         return {"unlocked": True, "has_security_key": self._vault.has_security_key}
 
     def _create(self, path: Path, master: str) -> None:
-        if len(master) < MIN_MASTER_LENGTH or not master.strip():
-            raise ProtocolError("weak_master")
         try:
             Vault.create(path, master)
             self._vault = Vault(path, master)
+        except WeakMaster as error:
+            raise ProtocolError("weak_master") from error
         except (OSError, VaultError, ValueError) as error:
             raise ProtocolError("create_failed") from error
 
@@ -267,6 +272,8 @@ def _settings_request(vault: Vault, operation: str, request: dict, closed: Event
         return _change_unlock_method(vault, operation, request, closed)
     except VaultConflict as error:
         raise ProtocolError("write_conflict") from error
+    except WeakMaster as error:
+        raise ProtocolError("weak_master") from error
     except SecurityKeyError as error:
         code = error.code if error.code in ERROR_MESSAGES else "key_failed"
         raise ProtocolError(code) from error
@@ -307,10 +314,7 @@ def _change_unlock_method(vault: Vault, operation: str, request: dict, closed: E
     _preflight_master(vault, master)
     match operation:
         case "change_master":
-            new_master = request["new_master"]
-            if len(new_master) < MIN_MASTER_LENGTH or not new_master.strip():
-                raise ProtocolError("weak_master")
-            vault.change_master(new_master)
+            vault.change_master(request["new_master"])
         case "register_key":
             if vault.has_security_key:
                 raise ProtocolError("already_registered")
@@ -388,7 +392,7 @@ def _credential_request(vault: Vault, operation: str, request: dict) -> dict:
             case "entry_notes":
                 return {"notes": _entry(vault, request["name"]).notes}
             case "entry_password":
-                return {"password": _entry(vault, request["name"]).password}
+                return {"password": require_utf8(_entry(vault, request["name"]).password)}
             case "save_entry":
                 return _save_entry(vault, request)
             case "delete_entry":
@@ -397,6 +401,8 @@ def _credential_request(vault: Vault, operation: str, request: dict) -> dict:
                 return {"deleted": True}
     except VaultConflict as error:
         raise ProtocolError("write_conflict") from error
+    except EntryEncodingError as error:
+        raise ProtocolError("entry_encoding") from error
     except (OSError, UnicodeError, VaultError) as error:
         raise ProtocolError("write_failed") from error
     raise ProtocolError("unknown_operation")

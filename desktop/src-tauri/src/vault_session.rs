@@ -11,6 +11,9 @@ use tokio::{
 };
 use zeroize::Zeroizing;
 
+#[cfg(target_os = "linux")]
+use rustix::time::{clock_gettime, ClockId};
+
 use crate::{
     vault_clipboard::VaultClipboard,
     vault_process::{CredentialInput, Error, Operation, Process, Secret},
@@ -20,6 +23,54 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const KEY_TIMEOUT: Duration = Duration::from_secs(50);
 const REGISTRATION_TIMEOUT: Duration = Duration::from_secs(100);
+
+#[derive(Clone, Copy, PartialEq)]
+struct IdleDeadline {
+    running: Instant,
+    #[cfg(target_os = "linux")]
+    boot: Duration,
+    #[cfg(target_os = "linux")]
+    suspend_offset: Duration,
+}
+
+impl IdleDeadline {
+    fn after(timeout: Duration) -> Self {
+        #[cfg(target_os = "linux")]
+        let (monotonic, boot) = (linux_clock(ClockId::Monotonic), boot_time());
+        Self {
+            running: Instant::now() + timeout,
+            #[cfg(target_os = "linux")]
+            boot: boot + timeout,
+            #[cfg(target_os = "linux")]
+            suspend_offset: boot.saturating_sub(monotonic),
+        }
+    }
+
+    fn elapsed(self) -> bool {
+        #[cfg(target_os = "linux")]
+        if self.elapsed_since_boot(boot_time(), linux_clock(ClockId::Monotonic)) {
+            return true;
+        }
+        Instant::now() >= self.running
+    }
+
+    #[cfg(target_os = "linux")]
+    fn elapsed_since_boot(self, boot: Duration, monotonic: Duration) -> bool {
+        let offset = boot.saturating_sub(monotonic);
+        boot >= self.boot || offset.saturating_sub(self.suspend_offset) > Duration::from_millis(50)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn boot_time() -> Duration {
+    linux_clock(ClockId::Boottime)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_clock(clock: ClockId) -> Duration {
+    let time = clock_gettime(clock);
+    Duration::new(time.tv_sec as u64, time.tv_nsec as u32)
+}
 
 #[derive(Clone, Default)]
 enum Selection {
@@ -45,8 +96,9 @@ impl Selection {
 #[derive(Clone, Default)]
 struct Session {
     generation: u64,
-    deadline: Option<Instant>,
+    deadline: Option<IdleDeadline>,
     closed: bool,
+    sleeping: bool,
     selection: Selection,
     choosing: bool,
 }
@@ -205,10 +257,7 @@ impl VaultSession {
 
     fn expire(&self) {
         self.state.send_if_modified(|state| {
-            if state
-                .deadline
-                .is_some_and(|deadline| Instant::now() >= deadline)
-            {
+            if state.deadline.is_some_and(IdleDeadline::elapsed) {
                 state.generation += 1;
                 state.deadline = None;
                 return true;
@@ -225,11 +274,10 @@ impl VaultSession {
 
     pub(crate) fn activity(&self, generation: u64) {
         self.state.send_if_modified(|state| {
-            let now = Instant::now();
             if state.generation == generation
-                && state.deadline.is_some_and(|deadline| now < deadline)
+                && state.deadline.is_some_and(|deadline| !deadline.elapsed())
             {
-                state.deadline = Some(now + self.idle_timeout);
+                state.deadline = Some(IdleDeadline::after(self.idle_timeout));
                 return true;
             }
             false
@@ -262,6 +310,7 @@ impl VaultSession {
         let mut generation = Err(Error::Locked);
         self.state.send_if_modified(|state| {
             if state.closed
+                || state.sleeping
                 || state.deadline.is_some()
                 || expected.is_some_and(|generation| generation != state.generation)
             {
@@ -286,6 +335,23 @@ impl VaultSession {
         let generation = self.state.borrow().generation;
         tokio::join!(self.stop_stale(), self.clean_clipboard());
         generation
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn system_sleep(&self, sleeping: bool) {
+        self.state.send_if_modified(|state| {
+            if state.closed {
+                return false;
+            }
+            // Also invalidate on a wake-only notification if preparation was missed.
+            if sleeping || !state.sleeping {
+                state.generation += 1;
+                state.deadline = None;
+                state.choosing = false;
+            }
+            state.sleeping = sleeping;
+            true
+        });
     }
 
     pub(crate) fn close(&self) {
@@ -422,7 +488,7 @@ impl VaultSession {
             if let Selection::New(path) = &state.selection {
                 state.selection = Selection::Existing(path.clone());
             }
-            state.deadline = Some(Instant::now() + self.idle_timeout);
+            state.deadline = Some(IdleDeadline::after(self.idle_timeout));
             Ok(Unlocked {
                 generation: state.generation,
                 has_security_key: opened.has_security_key,
@@ -604,6 +670,7 @@ impl VaultSession {
                 || state.generation != generation
                 || expected.is_some_and(|expected| expected != generation)
                 || (operation.requires_session() && state.deadline.is_none())
+                || (state.sleeping && !matches!(operation, Operation::Status))
             {
                 return Err(Error::Locked);
             }
@@ -693,6 +760,7 @@ fn keep_process(error: Error, credential_request: bool) -> bool {
                 Error::EntryMissing
                     | Error::EntryDuplicate
                     | Error::EntryInvalid
+                    | Error::EntryEncoding
                     | Error::WriteConflict
                     | Error::BackupFailed
                     | Error::ImportFailed
@@ -715,10 +783,7 @@ fn keep_process(error: Error, credential_request: bool) -> bool {
 
 fn clipboard_session_active(state: &watch::Receiver<Session>, generation: u64) -> bool {
     let state = state.borrow();
-    state.generation == generation
-        && state
-            .deadline
-            .is_some_and(|deadline| Instant::now() < deadline)
+    state.generation == generation && state.deadline.is_some_and(|deadline| !deadline.elapsed())
 }
 
 #[cfg(all(test, target_os = "linux"))]

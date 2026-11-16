@@ -283,6 +283,78 @@ async fn closing_cancels_pending_and_prevents_restart() {
 }
 
 #[tokio::test]
+async fn system_sleep_invalidates_the_session_and_cancels_pending_reads() {
+    let (dir, session) = fake_core(
+        r#"    if operation == "open":
+        reply(dict(unlocked=True, has_security_key=False))
+    elif operation == "entry_password":
+        (root / "started").touch()
+        time.sleep(30)
+        reply(dict(password="synthetic password"))
+"#,
+    );
+    let generation = session.status().await.unwrap().generation;
+    session
+        .unlock(generation, MASTER.to_owned().into())
+        .await
+        .unwrap();
+    let pending = tokio::spawn({
+        let session = Arc::clone(&session);
+        async move { session.reveal(generation, "Example".into()).await }
+    });
+    wait_for_file(&dir.path().join("started")).await;
+
+    session.system_sleep(true);
+    assert!(!session.active(generation));
+    session.stop_stale().await;
+    assert_eq!(pending.await.unwrap(), Err(Error::Locked));
+    assert!(session.process.lock().await.is_none());
+    assert_eq!(
+        session.reveal(generation, "Example".into()).await,
+        Err(Error::Locked)
+    );
+    let next = session.status().await.unwrap().generation;
+    assert_ne!(next, generation);
+    assert_eq!(
+        session.unlock(next, MASTER.to_owned().into()).await.err(),
+        Some(Error::Locked)
+    );
+    session.system_sleep(false);
+    session
+        .unlock(next, MASTER.to_owned().into())
+        .await
+        .unwrap();
+    assert!(session.active(next));
+}
+
+#[tokio::test]
+async fn suspend_time_expires_an_idle_session_without_a_system_notification() {
+    let (_dir, session) = fake_core(
+        r#"    if operation == "open":
+        reply(dict(unlocked=True, has_security_key=False))
+"#,
+    );
+    let generation = session.status().await.unwrap().generation;
+    session
+        .unlock(generation, MASTER.to_owned().into())
+        .await
+        .unwrap();
+    session.state.send_modify(|state| {
+        let deadline = state.deadline.as_mut().unwrap();
+        assert!(Instant::now() < deadline.running);
+        let monotonic = linux_clock(ClockId::Monotonic);
+        let after_short_sleep = monotonic + deadline.suspend_offset + Duration::from_secs(1);
+        assert!(after_short_sleep < deadline.boot);
+        assert!(deadline.elapsed_since_boot(after_short_sleep, monotonic));
+        deadline.boot = boot_time();
+    });
+    session.activity(generation);
+    assert!(!session.active(generation));
+    assert_eq!(session.list(generation).await.err(), Some(Error::Locked));
+    assert!(session.process.lock().await.is_none());
+}
+
+#[tokio::test]
 async fn inactivity_locks_while_a_request_is_pending() {
     let (dir, mut session) = fake_core(
         r#"    if operation == "open":

@@ -14,6 +14,7 @@ from time import monotonic, sleep
 from unittest.mock import Mock, patch
 
 from spm import console_interface
+from spm.adapters.spm_codec import SpmCodec
 from spm.sec_pass_manager import MAX_LENGTH, MIN_LENGTH, SYMBOLS
 from spm.security_key import SecurityKeyError
 from spm.vault import Entry, KeyEnrollment, Vault, VaultError
@@ -35,6 +36,32 @@ class VaultProtocolTests(unittest.TestCase):
         )
         self.assertEqual(result.stderr, b"")
         return result, [json.loads(line) for line in result.stdout.splitlines()]
+
+    def test_legacy_unicode_metadata_remains_accessible_and_new_invalid_text_is_rejected(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.spm"
+            legacy = Entry("Account \udcff", "Legacy \udcfe", username="Example \udcff", notes="Note \udcff")
+            existing = Entry(r"Account \udcff", "Different password")
+            previous = {entry.name.casefold(): entry for entry in (legacy, existing)}
+            original = SpmCodec.seal(previous, SpmCodec.new_state(MASTER))
+            path.write_bytes(original)
+            escaped_name = r"Account \udcff (2)"
+            _, replies = self.run_process(b"".join([
+                frame(1, "open", path=str(path), master=MASTER),
+                frame(2, "list"), frame(3, "entry_notes", name=escaped_name),
+                frame(4, "entry_password", name=escaped_name),
+                frame(5, "save_entry", name="invalid", password="secret", username="\udcff"),
+                frame(6, "entry_password", name=existing.name),
+            ]))
+            self.assertTrue(replies[0]["result"]["unlocked"])
+            self.assertEqual(replies[1]["result"]["entries"][1]["name"], escaped_name)
+            self.assertEqual(replies[1]["result"]["entries"][1]["username"], r"Example \udcff")
+            self.assertEqual(replies[2]["result"]["notes"], r"Note \udcff")
+            self.assertEqual(replies[3]["error"]["code"], "entry_encoding")
+            self.assertEqual(replies[4]["error"]["code"], "entry_encoding")
+            self.assertEqual(replies[5]["result"]["password"], existing.password)
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(Vault(path, MASTER).get(escaped_name).password, legacy.password)
 
     def test_open_list_and_lock_both_existing_formats(self):
         for filename, has_key in (("password-v1.spm", False), ("fido2-v2.spm", True)):
