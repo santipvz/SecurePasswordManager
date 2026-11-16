@@ -1,17 +1,21 @@
 # Desktop app
 
-## Install on Ubuntu
+## Install or upgrade on Ubuntu
 
-The desktop beta targets Ubuntu 24.04 LTS on amd64. Download the `.deb` and `SHA256SUMS` from [GitHub Releases](https://github.com/santipvz/SecurePasswordManager/releases). Verify the download and install it from the directory containing both files.
+The stable desktop app supports Ubuntu 24.04 LTS on amd64. Download the `.deb` and `SHA256SUMS` from [GitHub Releases](https://github.com/santipvz/SecurePasswordManager/releases). Verify the download and install it from the directory containing both files.
 
 ```sh
 sha256sum --check SHA256SUMS &&
-  gh attestation verify secure-password-manager_0.1.1_amd64.deb \
-    --repo santipvz/SecurePasswordManager --source-ref refs/heads/main &&
-  sudo apt install ./secure-password-manager_0.1.1_amd64.deb
+  gh attestation verify secure-password-manager_1.0.0_amd64.deb \
+    --repo santipvz/SecurePasswordManager \
+    --signer-workflow santipvz/SecurePasswordManager/.github/workflows/desktop.yml \
+    --source-ref refs/heads/main &&
+  sudo apt install ./secure-password-manager_1.0.0_amd64.deb
 ```
 
 Open **Secure Password Manager** from the applications menu as your normal user. The package includes the vault process and its Python runtime. Use `sudo apt remove secure-password-manager` to uninstall. Ubuntu's package manager leaves vaults and backups in your home directory during upgrades and removal. The default vault lives at `${XDG_DATA_HOME:-$HOME/.local/share}/SecurePasswordManager/vault.spm`.
+
+To upgrade from the beta, save an encrypted backup in **Settings**, close the app, and install the new package using the same command. Open your existing vault with its master password or registered YubiKey. If you use a custom location, choose **Open vault file** and select the existing `.spm` file.
 
 Use a USB YubiKey that supports FIDO2 and the `hmac-secret` extension. Ubuntu's udev and logind grant device access to the active local desktop user for recognized FIDO keys. If the app cannot see the key, reconnect it in the active desktop session and check its USB access using [Yubico's Linux device permissions guide](https://developers.yubico.com/yubikey-manager/Device_Permissions.html). Run the app under your desktop account.
 
@@ -67,4 +71,4 @@ npm --prefix desktop run tauri -- bundle --config src-tauri/tauri.ubuntu.conf.js
   --features custom-protocol --bundles deb --ci --no-sign
 ```
 
-The unsigned test package is in `desktop/src-tauri/target/release/bundle/deb/` and is available as the `ubuntu-24.04-amd64-deb` artifact from the Desktop workflow. The workflow installs it in a clean Ubuntu 24.04 container, opens its application menu entry as a standard user, and checks that an upgrade and purge preserve the synthetic vault and its encrypted backup. Test a physical YubiKey in a local Ubuntu desktop session with a disposable vault by registering the key, locking, and unlocking again with the key.
+The unsigned test package is in `desktop/src-tauri/target/release/bundle/deb/` and is available as the `ubuntu-24.04-amd64-deb` artifact from the Desktop workflow. The workflow installs it in a clean Ubuntu 24.04 container, opens its application menu entry as a standard user, and checks that an upgrade and purge preserve the synthetic vault and its encrypted backup. To test migration from the published beta, pass its verified `.deb` as the second argument to `desktop/scripts/verify_ubuntu_deb.sh` in the container. Test a physical YubiKey in a local Ubuntu desktop session with a disposable vault by registering the key, locking, and unlocking again with the key.
