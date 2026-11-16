@@ -33,7 +33,8 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y --no-install-recommends "$initial_package" \
+# The minimal Ubuntu image excludes documentation by default.
+apt-get -o "DPkg::Options::=--path-include=$docs/*" install -y --no-install-recommends "$initial_package" \
     dbus-daemon desktop-file-utils jq libgtk-3-bin libgl1-mesa-dri xauth xdotool xvfb
 desktop-file-validate "$launcher"
 test -x "$core"
@@ -78,7 +79,7 @@ if [[ -z $previous_package ]]; then
     sed -i "s/^Version: .*/Version: $upgrade_version/" "$work/upgrade/DEBIAN/control"
     dpkg-deb --build --root-owner-group "$work/upgrade" "$upgrade_package" >/dev/null
 fi
-dpkg -i "$upgrade_package"
+dpkg --path-include="$docs/*" -i "$upgrade_package"
 test "$(dpkg-query -W -f='${Version}' "$package")" = "$upgrade_version"
 test -s "$docs/licenses/rust/glib-0.18.5/LICENSE"
 sha256sum --check "$work/vault.sha256"
