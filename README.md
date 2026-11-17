@@ -29,16 +29,16 @@
 
 The desktop package supports **Ubuntu 24.04 LTS (amd64)** and includes its own Python runtime.
 
-1. Download `secure-password-manager_1.0.0_amd64.deb` and `SHA256SUMS` from [the 1.0.0 release](https://github.com/santipvz/SecurePasswordManager/releases/tag/v1.0.0).
+1. Download `secure-password-manager_1.1.0_amd64.deb` and `SHA256SUMS` from [the 1.1.0 release](https://github.com/santipvz/SecurePasswordManager/releases/tag/v1.1.0).
 2. From the download directory, check the checksum and verify the GitHub build attestation before installing. Use a version of [GitHub CLI](https://cli.github.com/manual/gh_attestation_verify) that supports `gh attestation verify` and sign in with `gh auth login` if prompted.
 
    ```sh
    sha256sum --check SHA256SUMS &&
-     gh attestation verify secure-password-manager_1.0.0_amd64.deb \
+     gh attestation verify secure-password-manager_1.1.0_amd64.deb \
        --repo santipvz/SecurePasswordManager \
        --signer-workflow santipvz/SecurePasswordManager/.github/workflows/desktop.yml \
        --source-ref refs/heads/main &&
-     sudo apt install ./secure-password-manager_1.0.0_amd64.deb
+     sudo apt install ./secure-password-manager_1.1.0_amd64.deb
    ```
 
 3. Open **Secure Password Manager** from the applications menu.
