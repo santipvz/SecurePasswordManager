@@ -38,7 +38,11 @@ Dependabot opens weekly version update PRs on `develop` for GitHub Actions, Pyth
 
 Use the [threat model](THREAT_MODEL.md) for changes to secret handling, IPC, storage, or hardware access. Link test evidence for the relevant boundary in the PR. Use [private vulnerability reporting](SECURITY.md) for suspected vulnerabilities in the app.
 
-Review the dependency report and verify which versions and platforms each finding affects. Record the upstream reference, affected dependency path, and remediation or tracking decision in the release review. Resolve applicable high and critical findings before release. The dependency job fails for advisory groups with CVSS 7.0 or above or an explicit high or critical severity. Review unscored advisories and report their disposition in the release review. For a confirmed secret, revoke or rotate it and investigate its exposure before release.
+Review the dependency report and verify which versions and platforms each finding affects. Record the upstream reference, affected dependency path, and remediation or tracking decision in the release review. Resolve applicable high and critical findings before release. The dependency job fails for advisory groups with CVSS 7.0 or above or an explicit high or critical severity.
+
+When no fixed version exists and the finding does not apply to the shipped app, record an accepted risk in [advisory-exceptions.json](scripts/advisory-exceptions.json). Each entry names the advisory, package, exact version, lockfile, reason, and an expiry date no more than 90 days ahead. An entry covers only that version, so updating the package requires a new review. The job fails when an exception expires, no longer matches the scan, or is malformed. Remove the entry when you update the package, and renew it only after a fresh review.
+
+Review unscored advisories and report their disposition in the release review. For a confirmed secret, revoke or rotate it and investigate its exposure before release.
 
 See [desktop dependency patches](desktop/DEPENDENCY_PATCHES.md) for backports and their corresponding regression checks.
 
