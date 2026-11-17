@@ -47,6 +47,24 @@ def apply_exceptions(blocks: bool, keys: list, exceptions: dict, today: date) ->
     return False, f" | accepted until {expiry.isoformat()}"
 
 
+def stale_exceptions(exceptions: dict, used: set, today: date) -> list[str]:
+    """List exceptions that no longer match the scan or have expired.
+
+    Expiry applies even when the advisory no longer blocks, so a downgraded
+    advisory cannot keep an old accepted-risk entry alive.
+    """
+    problems = []
+    for key, entry in sorted(exceptions.items()):
+        lockfile, name, version, identifier = key
+        if key not in used:
+            problems.append(f"Remove the unused advisory exception for {identifier} "
+                            f"({name} {version} in {lockfile}).")
+        elif entry["expires"] < today:
+            problems.append(f"Renew or remove the advisory exception for {identifier}, "
+                            f"which expired on {entry['expires'].isoformat()}.")
+    return problems
+
+
 def describe(report: dict, root: Path, exceptions: dict | None = None,
              today: date | None = None) -> bool:
     """Print one line per advisory group and return whether the severity gate passes.
@@ -96,11 +114,10 @@ def describe(report: dict, root: Path, exceptions: dict | None = None,
                 raise ValueError(f"Incomplete advisory groups in {path}")
     if sources != LOCKFILES:
         raise ValueError(f"Unexpected scan coverage: {sorted(sources)}")
-    for key in sorted(exceptions.keys() - used):
-        lockfile, name, version, identifier = key
-        print(f"Remove the unused advisory exception for {identifier} "
-              f"({name} {version} in {lockfile}).")
-        blocking = True
+    problems = stale_exceptions(exceptions, used, today)
+    for problem in problems:
+        print(problem)
+    blocking |= bool(problems)
     return not blocking
 
 

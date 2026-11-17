@@ -65,6 +65,12 @@ class AdvisoryGateTest(unittest.TestCase):
     def test_expired_exception_blocks(self):
         self.assertFalse(self.gate(self.report(), [exception(expires="2026-11-16")]))
 
+    def test_expired_exception_blocks_after_a_severity_downgrade(self):
+        self.assertFalse(self.gate(self.report(score="6.9"), [exception(expires="2026-11-16")]))
+
+    def test_exception_is_valid_on_its_expiry_date(self):
+        self.assertTrue(self.gate(self.report(), [exception(expires="2026-11-17")]))
+
     def test_exception_for_another_version_does_not_apply(self):
         self.assertFalse(self.gate(self.report(version="4.0.8"), [exception()]))
 
