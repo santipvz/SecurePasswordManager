@@ -6,11 +6,11 @@ The stable desktop app supports Ubuntu 24.04 LTS on amd64. Download the `.deb` a
 
 ```sh
 sha256sum --check SHA256SUMS &&
-  gh attestation verify secure-password-manager_1.0.0_amd64.deb \
+  gh attestation verify secure-password-manager_1.1.0_amd64.deb \
     --repo santipvz/SecurePasswordManager \
     --signer-workflow santipvz/SecurePasswordManager/.github/workflows/desktop.yml \
     --source-ref refs/heads/main &&
-  sudo apt install ./secure-password-manager_1.0.0_amd64.deb
+  sudo apt install ./secure-password-manager_1.1.0_amd64.deb
 ```
 
 Open **Secure Password Manager** from the applications menu as your normal user. The package includes the vault process and its Python runtime. Use `sudo apt remove secure-password-manager` to uninstall. Ubuntu's package manager leaves vaults and backups in your home directory during upgrades and removal. The default vault lives at `${XDG_DATA_HOME:-$HOME/.local/share}/SecurePasswordManager/vault.spm`.
