@@ -4,25 +4,41 @@ The vault uses a compact collection and a reading surface. A top toolbar keeps V
 
 ## Identity and color
 
-The [mark](public/mark.svg) uses two interlocking angles. Use the same geometry on the favicon, app icon, unlock screen, and toolbar. Pair it with the full name in product surfaces. Inter is bundled locally. Use 12–13 px for metadata, 14 px for controls and body text, and 24–40 px for page headings depending on the window.
+The [mark](public/mark.svg) is a 3×3 grid of blocks on a graphite tile. The centre block is signal orange and the bottom-right block is missing, which keeps the mark recognizable at 16 px. Use the same file on the favicon, the app icon in `src-tauri/icons`, the unlock screen, and the toolbar. Pair it with the full name in product surfaces. Regenerate the app icons with `npx tauri icon public/mark.svg` and keep `icon.png` (128 px) and `icon.ico`.
+
+Inter is bundled locally in 400, 500, 600, and 700 weights. Use 12–13 px for metadata, 13–14 px for controls and body text, and 19–25 px for pane and page headings.
+
+The palette is graphite with one signal colour. Neutrals carry the interface; primary buttons are ink on light and near-white on dark. Orange marks selection, focus, and progress (sliders, switches, the reveal countdown) and nothing else.
 
 | Role | Light | Dark |
 | --- | --- | --- |
-| Canvas | `#f3f5f9` | `#151b25` |
-| Credential list | `#f2f4f8` | `#171e29` |
-| Reading and form surface | `#ffffff` | `#1b2330` |
-| Text | `#182334` | `#ecf2fb` |
-| Secondary text | `#4c5c71` | `#a8b6cc` |
-| Accent | `#2f53a6` | `#a9c1ff` |
-| Selection | `#e5edfb` | `#293a59` |
+| Canvas and reading pane | `#f5f5f4` | `#111113` |
+| Credential list | `#fafaf9` | `#141416` |
+| Cards and toolbar | `#ffffff` | `#18181b` |
+| Text | `#18181b` | `#fafafa` |
+| Secondary text | `#5f5f68` | `#a1a1aa` |
+| Primary button | `#18181b` | `#f4f4f5` |
+| Accent text (selection, links) | `#c2410c` | `#ff8a50` |
+| Signal fill (focus, progress) | `#ff6a2b` | `#ff6a2b` |
+| Selection | `#fdeee6` | `#2e1b12` |
 
-Use the tokens in [styles.css](src/styles.css). Reserve the accent for primary actions and active states. Field separators use the quieter line token. Interactive fields use a higher-contrast outline, and keyboard focus uses a separate ring. Pair error and status colors with text.
+Use the tokens in [styles.css](src/styles.css). Warnings use amber and errors use red so they stay distinct from the signal orange. Group related fields in one bordered card with a 10 px radius and never nest cards; controls use a 7 px radius. Prefer borders over shadows. Field separators use the quieter line token. Interactive fields use a higher-contrast outline, and keyboard focus uses a separate ring. Pair error, warning, and success colours with text and an icon.
+
+Credential avatars are neutral letter tiles. Revealed passwords use a monospace face and colour digits and symbols so similar characters are easier to tell apart.
 
 ## Interaction
 
-- Group credential fields with rules and spacing. Use persistent labels in forms and place errors beside the affected workflow.
-- Keep **Copy password** visible in the detail view. Quick copy is visible on the selected row, on hover, during keyboard focus, and on touch devices.
-- Keep review and settings scannable with section headings and aligned actions. Use empty-state copy that identifies the current state and offers a relevant next action.
+- Group credential fields in a card. Use persistent labels in forms and place errors beside the affected workflow.
+- Keep **Copy** visible beside the password in the detail view. Quick copy is visible on the selected row, on hover, during keyboard focus, and on touch devices.
+- A revealed password shows a bar that counts down the 10-second reveal.
+- The master password field offers a show/hide toggle and warns when Caps Lock is on. Creating a vault shows progress toward the 15-character minimum without storing the value.
+- Ask for deletion in an inline danger callout that names the credential.
+- Keep review and settings scannable with section headings, summary figures, and aligned actions. Use empty-state copy that identifies the current state and offers a relevant next action.
+- Use motion only as feedback to an action, such as a confirmation or status message. Do not animate view entrances. Remove motion under `prefers-reduced-motion`.
+
+## Avoid
+
+The lock screen is a tool, not a landing page. Do not add marketing copy, feature lists, gradient text, glows, or decorative backgrounds. Avoid icon tiles above headings, metric-card rows, accent stripes on list rows, all-caps section labels, and arrows on buttons. These patterns follow the [Impeccable slop catalog](https://impeccable.style/slop) and the [Vercel web interface guidelines](https://github.com/vercel-labs/web-interface-guidelines).
 
 ## Visual review
 

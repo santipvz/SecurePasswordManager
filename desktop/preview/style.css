@@ -1,0 +1,25 @@
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.preview-notice {
+  padding: 8px 16px;
+  background: #18181b;
+  border-bottom: 1px solid #27272a;
+  color: #d4d4d8;
+  text-align: center;
+  font: 13px/1.5 Inter, system-ui, sans-serif;
+}
+
+.preview-notice code { color: #fafafa; padding: 1px 5px; border-radius: 4px; background: rgb(255 255 255 / .08); }
+
+#app {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+#app .desktop-app { height: 100%; min-height: 0; }

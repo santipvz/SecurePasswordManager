@@ -8,7 +8,8 @@
 </script>
 
 <script lang="ts">
-  import { ArrowLeft, ChevronRight, ShieldCheck } from "@lucide/svelte"
+  import { ArrowLeft, ChevronRight, CircleAlert, Repeat2, Ruler, ShieldCheck } from "@lucide/svelte"
+  import { avatarLetter } from "./avatar"
   import { onMount } from "svelte"
 
   let { result, pending, error, onClose, onEntry }: {
@@ -29,31 +30,42 @@
       .map((name) => ({ name, short: short.has(name), reused: reused.has(name) }))
   })
 
+  const reusedCount = $derived(affected.filter((entry) => entry.reused).length)
+  const shortCount = $derived(affected.filter((entry) => entry.short).length)
+
   onMount(() => heading.focus())
 </script>
 
 <button class="text-button review-back" onclick={onClose}><ArrowLeft size={16} /> Back to entries</button>
-<h2 tabindex="-1" bind:this={heading}>Password review</h2>
+<header class="review-header">
+  <h2 tabindex="-1" bind:this={heading}>Password review</h2>
+  <p class="muted">Checks run locally on the unlocked vault and never change the file.</p>
+</header>
 {#if pending}
-  <p class="feedback" role="status"><span class="spinner"></span> Reviewing passwords…</p>
+  <p class="feedback review-pending" role="status"><span class="spinner"></span> Reviewing passwords…</p>
 {:else if error}
-  <p class="error-note" role="alert">{error}</p>
+  <p class="error-note" role="alert"><CircleAlert size={16} /> <span>{error}</span></p>
 {:else if result}
   {#if result.total === 0}
     <p class="empty">This vault has no credentials to review.</p>
   {:else if !affected.length}
-    <p class="feedback review-clear"><ShieldCheck size={18} /> All passwords are unique and at least {result.minimum_length} characters long.</p>
+    <p class="feedback review-clear"><ShieldCheck size={17} /> All {result.total} passwords are unique and at least {result.minimum_length} characters long.</p>
   {:else}
-    <p class="feedback">{affected.length} of {result.total} credentials have short or reused passwords.</p>
+    <p class="summary">
+      <strong>{affected.length} of {result.total}</strong> credentials need attention:
+      {[shortCount ? `${shortCount} shorter than ${result.minimum_length} characters` : "", reusedCount ? `${reusedCount} reused` : ""].filter(Boolean).join(", ")}.
+    </p>
     <ul class="entries findings">
       {#each affected.slice(0, limit) as entry (entry.name)}
         <li>
           <button onclick={() => onEntry(entry.name)}>
+            <span class="entry-mark" aria-hidden="true">{avatarLetter(entry.name)}</span>
             <span class="entry-text">
               <strong>{entry.name}</strong>
-              <span>
-                {entry.short ? `Fewer than ${result.minimum_length} characters` : ""}
-                {entry.short && entry.reused ? " · " : ""}{entry.reused ? "Reused password" : ""}
+              <span class="issue">
+                {#if entry.short}<Ruler size={13} aria-hidden="true" />{:else}<Repeat2 size={13} aria-hidden="true" />{/if}
+                {entry.short && entry.reused ? `Shorter than ${result.minimum_length} characters and reused`
+                  : entry.short ? `Shorter than ${result.minimum_length} characters` : "Reused in another credential"}
               </span>
             </span>
             <ChevronRight size={16} class="entry-arrow" />
@@ -68,10 +80,25 @@
 {/if}
 
 <style>
-  .review-back { margin: 0 0 12px -8px; }
-  h2 { font-size: clamp(26px, 4vw, 36px); }
-  .findings { margin-block: 15px; border-top: 1px solid var(--line); }
-  .findings li { border-bottom: 1px solid var(--line); }
-  .review-clear { color: var(--accent); margin-top: 15px; }
+  .review-back { margin: 0 0 10px -10px; }
+  .review-header { margin-bottom: 20px; }
+  h2 { font-size: clamp(21px, 2.6vw, 24px); font-weight: 600; }
+  .review-header p { margin-top: 4px; font-size: 13.5px; }
+  .review-pending { gap: 10px; }
+  .review-clear { color: var(--success); font-weight: 500; }
+  .empty { color: var(--muted); }
+  .summary { margin-bottom: 12px; line-height: 1.55; }
+  .summary strong { font-weight: 600; }
+  .findings {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .findings li + li { border-top: 1px solid var(--line); }
+  .findings button { border-radius: 0; padding: 10px 14px; }
+  .issue { display: flex; align-items: center; gap: 5px; color: var(--warning); }
+  .issue :global(svg) { flex: none; }
   .error-note { margin-top: 12px; }
 </style>

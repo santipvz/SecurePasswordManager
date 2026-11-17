@@ -1,50 +1,80 @@
-# Secure Password Manager
+<div align="center">
+  <img src="desktop/public/mark.svg" alt="" width="80" height="80">
+  <h1>Secure Password Manager</h1>
+  <p>An offline password manager for Ubuntu with a local encrypted vault and a Python CLI.</p>
+  <p>
+    <a href="https://github.com/santipvz/SecurePasswordManager/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/santipvz/SecurePasswordManager?label=release&amp;color=14243d"></a>
+    <a href="#install-on-ubuntu"><img alt="Ubuntu 24.04 LTS · amd64" src="https://img.shields.io/badge/Ubuntu%2024.04%20LTS-amd64-14243d?logo=ubuntu"></a>
+    <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-14243d"></a>
+    <a href="https://github.com/santipvz/SecurePasswordManager/actions/workflows/pylint.yml?query=branch%3Adevelop"><img alt="Python tests" src="https://github.com/santipvz/SecurePasswordManager/actions/workflows/pylint.yml/badge.svg?branch=develop"></a>
+    <a href="https://github.com/santipvz/SecurePasswordManager/actions/workflows/desktop.yml?query=branch%3Adevelop"><img alt="Desktop build and tests" src="https://github.com/santipvz/SecurePasswordManager/actions/workflows/desktop.yml/badge.svg?branch=develop"></a>
+    <a href="https://github.com/santipvz/SecurePasswordManager/actions/workflows/security.yml?query=branch%3Adevelop"><img alt="Security scans" src="https://github.com/santipvz/SecurePasswordManager/actions/workflows/security.yml/badge.svg?branch=develop"></a>
+  </p>
+  <p>
+    <a href="#install-on-ubuntu"><strong>Install on Ubuntu</strong></a> ·
+    <a href="https://santipvz.github.io/SecurePasswordManager/">Try the browser demo</a> ·
+    <a href="#use-the-vault">Use the vault</a> ·
+    <a href="#command-line">Command line</a> ·
+    <a href="#security-and-compatibility">Security</a>
+  </p>
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="desktop/docs/desktop-demo-poster.png">
+    <source type="image/webp" srcset="desktop/docs/desktop-demo.webp">
+    <img src="desktop/docs/desktop-demo-poster.png" alt="Desktop app walkthrough: unlock the vault, search for a credential, reveal and copy its password, add a credential with the password generator, review short and reused passwords, switch to the dark theme, and lock the vault." width="880">
+  </picture>
+  <p><a href="desktop/docs/desktop-demo.mp4">Watch the 49-second desktop demo (MP4, 1080p60)</a></p>
+</div>
 
-An offline password generator and encrypted vault for credentials, websites, and notes.
+## Install on Ubuntu
 
-## Desktop app for Ubuntu
+The desktop package supports **Ubuntu 24.04 LTS (amd64)** and includes its own Python runtime.
 
-The desktop installer targets Ubuntu 24.04 LTS on amd64. Download the `.deb` and `SHA256SUMS` from [GitHub Releases](https://github.com/santipvz/SecurePasswordManager/releases). The [desktop guide](desktop/README.md) covers verification, installation, and encrypted backups.
+1. Download `secure-password-manager_1.1.0_amd64.deb` and `SHA256SUMS` from [the 1.1.0 release](https://github.com/santipvz/SecurePasswordManager/releases/tag/v1.1.0).
+2. From the download directory, check the checksum and verify the GitHub build attestation before installing. Use a version of [GitHub CLI](https://cli.github.com/manual/gh_attestation_verify) that supports `gh attestation verify` and sign in with `gh auth login` if prompted.
 
-![Secure Password Manager showing an unlocked vault with example credentials and a hidden password](desktop/docs/vault-dark.png)
+   ```sh
+   sha256sum --check SHA256SUMS &&
+     gh attestation verify secure-password-manager_1.1.0_amd64.deb \
+       --repo santipvz/SecurePasswordManager \
+       --signer-workflow santipvz/SecurePasswordManager/.github/workflows/desktop.yml \
+       --source-ref refs/heads/main &&
+     sudo apt install ./secure-password-manager_1.1.0_amd64.deb
+   ```
 
-## Python edition
+3. Open **Secure Password Manager** from the applications menu.
 
-Run these commands from the repository with Python 3.11 or later.
+If you are upgrading, save an encrypted backup from **Settings** and close the app before installing. Choose **Open vault file** if your existing `.spm` file is in a custom location. The [desktop guide](desktop/README.md) covers upgrades, the default vault path, and YubiKey device access.
 
-```sh
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install .
-cpass-desktop
-```
+## Use the vault
 
-In PowerShell, activate the environment with `.venv\Scripts\Activate.ps1`. On Debian or Ubuntu, install `python3-tk` if your Python installation lacks Tkinter. The `cpass` and `python -m spm` commands work without Tkinter.
+1. Choose **Create vault**, pick a location for the `.spm` file, and set a unique master password of at least 15 characters. Use **Open vault file** to open an existing vault.
+2. Choose **Add entry**, then enter a password or select **Open password generator → Use password**. Choose **Save credential** to store it with its name, username, website, and notes.
+3. Press **Ctrl+K** to search by name, username, or website. Select an entry to view it, edit it, or copy its password. Choose **Lock vault** when you finish. The app also locks after five minutes of inactivity.
 
-### Using the Python vault
+| If you want to… | Open |
+| --- | --- |
+| Generate a password of 12–256 characters without saving it | **Generator** or **Password generator** on the lock screen |
+| Find short or reused passwords | **Review** |
+| Save or test an encrypted backup | **Settings → Save backup** or **Open backup** |
+| Unlock with a compatible USB security key | **Settings → Register YubiKey**, then select **YubiKey** on the unlock screen |
+| Import legacy `.key` files | **Settings → Import .key files**. The original files remain on disk in plaintext. |
 
-1. Open `cpass-desktop` and create a vault with a long, unique master password. Use at least 15 characters.
-2. Choose **New credential**. Paste an existing password or choose **Generate** and set its length and allowed symbols.
-3. Search by name, username, or website. Select a credential to copy its password, reveal it for 15 seconds, edit it, or delete it.
-
-The app attempts to clear the clipboard after 30 seconds if it still contains the copied password. **Lock** ends the session immediately. The vault also locks after five minutes of inactivity.
-On Linux, the Python desktop app checks for suspension before extending an unlocked session.
-
-**Review vault** groups accounts that share a password and flags passwords shorter than 15 characters. The report runs locally, lists credential names, and provides a shortcut to the selected account. [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver)
-
-To generate a password without storing it, choose **Generator…** on the welcome screen or **File → Generate without saving…**. To create an encrypted backup, choose **File → Save encrypted backup…**. Use **Open file…** from the lock screen to open it.
-
-### Unlocking the Python vault with a YubiKey
-
-Install the optional FIDO2 support with `python -m pip install ".[yubikey]"`.
-
-1. Connect a USB security key that supports `hmac-secret` and `credProtect` and has a FIDO2 PIN or fingerprint verification set up. Linux requires permission to access the USB device. Windows requires WebAuthn support for PRF. [YubiKey compatibility](https://docs.yubico.com/hardware/yubikey/yk-tech-manual/yk5-apps-fido.html), [Linux device access](https://developers.yubico.com/python-fido2/#_installation)
-2. Open the vault with the master password and choose **File → Register FIDO2 key…**. Follow the PIN or fingerprint prompt and touch the key when it blinks. Registration may require two touches.
-3. Lock the vault and choose **Use FIDO2 key**. Keep the master password for recovery.
-
-The vault supports one registered key. Removing it or changing the master password rotates the encryption key and removes the registration from the active vault. Existing backups retain their original unlock methods.
+Keep the master password for recovery. Backups retain the unlock methods they had when saved. Follow the [desktop guide](desktop/README.md) for backup, restore, and hardware key details.
 
 ## Command line
+
+Install from the repository with **Python 3.11 or later**.
+
+```sh
+git clone https://github.com/santipvz/SecurePasswordManager.git
+cd SecurePasswordManager
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install .
+cpass --help
+```
+
+In Windows PowerShell, use `py -3 -m venv .venv` to create the environment and `.venv\Scripts\Activate.ps1` to activate it. You can also run the CLI with `python -m spm`.
 
 ```sh
 cpass init
@@ -52,36 +82,35 @@ cpass generate --length 24
 cpass add "Personal email" --username ana@example.org --generate
 cpass list email
 cpass audit
-cpass show "Personal email"
-cpass edit "Personal email" --generate --length 32 --no-symbols
 cpass backup vault-backup.spm
 cpass --vault vault-backup.spm list
-cpass key-add
-cpass --security-key list
-cpass key-remove
-cpass change-master
 ```
 
-Omit `--generate` from `cpass add` to enter an account password without echo. Use `--prompt-password` to enter a replacement password with `cpass edit`. The `cpass show --password` command writes a password to standard output.
+`cpass generate` prints a password without saving it. `cpass add --generate` saves a generated password directly to the vault. Omit `--generate` to enter an existing password at a hidden prompt. Use `cpass edit "Personal email" --prompt-password` to replace it and `--prompt-notes` with `add` or `edit` to enter sensitive notes privately. Adding `--password` or `--notes` to `cpass show "Personal email"` writes sensitive values to standard output.
 
-Use `--prompt-notes` with `cpass add` or `cpass edit` to enter notes without echo. On edit, omit the flag to keep the current notes or submit an empty value at the prompt to clear them. Use `cpass show "Personal email" --notes` to include sensitive notes on standard output.
+Run `cpass import-key first.key second.key` to import legacy files. The import uses filenames as credential names and cancels the whole batch if a file is invalid or a name is duplicated. The original files remain on disk in plaintext.
 
-Import previous `.key` files with **File → Import .key files…** or `cpass import-key first.key second.key`. The import uses filenames as credential names. A duplicate or invalid file cancels the whole batch. The original files remain on disk in plaintext.
+### Python desktop and FIDO2
+
+Run `cpass-desktop` for the Tkinter interface. On Debian or Ubuntu, install `python3-tk` if Tkinter is missing. Use **New credential** to add an entry, **Review vault** to check passwords, and **File → Save encrypted backup…** to back up the vault.
+
+Install the optional FIDO2 support with `python -m pip install ".[yubikey]"`. Register a compatible key with **File → Register FIDO2 key…** or `cpass key-add`. To unlock, choose **Use FIDO2 key** in the Python desktop app or run `cpass --security-key list`. The key needs `hmac-secret`, `credProtect`, and a FIDO2 PIN or fingerprint. Windows also needs WebAuthn PRF support. [YubiKey FIDO2 compatibility](https://docs.yubico.com/hardware/yubikey/yk-tech-manual/yk5-apps-fido.html) · [Linux device permissions](https://developers.yubico.com/yubikey-manager/Device_Permissions.html)
 
 ## Security and compatibility
 
-- Passwords are generated with Python's `secrets` module. The default is 24 characters and the supported range is 12 to 256. [Python secrets documentation](https://docs.python.org/3/library/secrets.html)
-- Argon2id derives a 256-bit key with a 16-byte random salt, 64 MiB of memory, three passes, and four lanes. AES-256-GCM authenticates and encrypts the vault, including credential names and notes. Each write uses a fresh nonce. [RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html), [AES-GCM documentation](https://cryptography.io/en/latest/hazmat/primitives/aead/#cryptography.hazmat.primitives.ciphers.aead.AESGCM)
-- New master passwords must use at least 15 characters and pass a local check for common passwords and simple sequences. Existing master passwords still unlock their vaults.
-- Both existing `.spm` versions remain supported. Version 1 uses the master password and version 2 adds a copy of the data key protected by FIDO2 PRF. A change to format or derivation parameters requires a new version and a compatibility test. [WebAuthn PRF](https://www.w3.org/TR/webauthn-3/#prf-extension)
-- Older credential metadata with invalid Unicode is displayed using visible escapes. Edit the affected credential to replace those characters. For a legacy password with invalid Unicode, enter a replacement in the editor.
-- The application checks for concurrent changes before atomically replacing the vault file. Use a private directory on a local filesystem. The vault protects data at rest. A compromised computer or clipboard history can expose data while it is in use. The project has yet to undergo an independent security audit.
+- The `.spm` vault encrypts credential names, usernames, websites, passwords, and notes with AES-256-GCM. Argon2id derives the master-password key. Password generation and review run locally.
+- The app can open existing `.spm` vaults in both formats. Version 1 uses the master password. Version 2 also supports a registered FIDO2 key. Changing the master password rotates the active vault key and clears the active hardware key registration.
+- Encryption protects data at rest. Clipboard history and software running on the same computer can expose secrets while the vault is in use. The project has yet to undergo an independent security audit.
 
-## Development
+See the [threat model](THREAT_MODEL.md) for security boundaries and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
-```sh
-python -m pip install -e ".[yubikey]"
-python -m unittest discover -s tests -v
-```
+## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+| Guide | What it covers |
+| --- | --- |
+| [Contributing](CONTRIBUTING.md) | Branches, commits, and PR review |
+| [Architecture](ARCHITECTURE.md) | The shared vault core and its adapters |
+| [Desktop development](desktop/README.md#develop) | Running Tauri and the browser preview with fictional data |
+| [CI and releases](CI.md) | Reproducing checks, verifying packages, and measuring desktop performance |
+
+Released under the [MIT license](LICENSE).

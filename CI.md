@@ -1,6 +1,6 @@
 # CI and release checks
 
-GitHub Actions runs the Python suite on Linux, Windows, and macOS. The desktop workflow checks Svelte and TypeScript, builds the frontend, packages the Python core, and tests the Rust bridge using synthetic vaults. The Ubuntu job also measures the optimized desktop build. A separate job on `main` signs build provenance for the verified Ubuntu package.
+GitHub Actions runs the Python suite on Linux, Windows, and macOS. The desktop workflow checks Svelte and TypeScript, builds the frontend, packages the Python core, and tests the Rust bridge using synthetic vaults. The Ubuntu job also measures the optimized desktop build and drives the installed package through creating a vault and credential, locking, and reopening an encrypted backup. A separate job on `main` signs build provenance for the verified Ubuntu package.
 
 ## Reproduce checks
 
@@ -21,9 +21,10 @@ cargo test --locked --features custom-protocol --manifest-path desktop/src-tauri
 
 The first sync installs the locked build backend. The second uses it to build the local project. Commit dependency changes with their corresponding lockfiles. Use `uv lock --upgrade-package <package>` for a targeted Python update. Cargo verifies `Cargo.lock` with `--locked`, and npm verifies `package-lock.json` with `npm ci`.
 
-With [OSV-Scanner v2.7.1](https://github.com/google/osv-scanner/releases/tag/v2.7.1) and [Gitleaks v8.30.1](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1) on your PATH, run these commands. The workflows verify downloaded binaries against pinned checksums.
+With [OSV-Scanner v2.7.1](https://github.com/google/osv-scanner/releases/tag/v2.7.1), [Gitleaks v8.30.1](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1), and [zizmor v1.32.0](https://github.com/zizmorcore/zizmor/releases/tag/v1.32.0) on your PATH, run these commands. The workflows verify downloaded binaries against pinned checksums.
 
 ```sh
+zizmor --offline .github
 bash scripts/scan-dependencies.sh /tmp/spm-dependencies.json
 scan_config=$(mktemp -d)
 printf '[extend]\nuseDefault = true\n' > "$scan_config/gitleaks.toml"
@@ -31,17 +32,27 @@ gitleaks git --redact --no-banner --log-opts='--diff-merges=first-parent HEAD' -
   --gitleaks-ignore-path "$scan_config" --ignore-gitleaks-allow
 ```
 
+Dependabot opens weekly version update PRs on `develop` for GitHub Actions, Python via uv, and npm in `desktop`. Minor and patch updates are grouped within each ecosystem. Version updates use a seven-day cooldown.
+
 ## Review advisories and release
 
 Use the [threat model](THREAT_MODEL.md) for changes to secret handling, IPC, storage, or hardware access. Link test evidence for the relevant boundary in the PR. Use [private vulnerability reporting](SECURITY.md) for suspected vulnerabilities in the app.
 
-Review the dependency report and verify which versions and platforms each finding affects. Record the upstream reference, affected dependency path, and remediation or tracking decision in the release review. Resolve applicable high and critical findings before release. The dependency job fails for advisory groups with CVSS 7.0 or above or an explicit high or critical severity. Review unscored advisories and report their disposition in the release review. For a confirmed secret, revoke or rotate it and investigate its exposure before release.
+Review the dependency report and verify which versions and platforms each finding affects. Record the upstream reference, affected dependency path, and remediation or tracking decision in the release review. Resolve applicable high and critical findings before release. The dependency job fails for advisory groups with CVSS 7.0 or above or an explicit high or critical severity.
+
+When no fixed version exists and the finding does not apply to the shipped app, record an accepted risk in [advisory-exceptions.json](scripts/advisory-exceptions.json). Each entry names the advisory, package, exact version, lockfile, reason, and an expiry date no more than 90 days ahead. An entry covers only that version, so updating the package requires a new review. The job fails when an exception expires, no longer matches the scan, or is malformed. Remove the entry when you update the package, and renew it only after a fresh review.
+
+Review unscored advisories and report their disposition in the release review. For a confirmed secret, revoke or rotate it and investigate its exposure before release.
 
 See [desktop dependency patches](desktop/DEPENDENCY_PATCHES.md) for backports and their corresponding regression checks.
 
-Require the Python and desktop test evidence, the dependency report, and the secret scan for the release PR into `main`. Confirm the results apply to the release candidate before tagging it. Review new findings from the scheduled scan on `develop` against any published packages they affect.
+Require the Python and desktop test evidence, the workflow audit, the dependency report, and the secret scan for the release PR into `main`. Confirm the results apply to the release candidate before tagging it. Review new findings from the scheduled scan on `develop` against any published packages they affect.
 
 After merging the release PR, download the `ubuntu-release` artifact from the successful Desktop run for the exact `main` commit. Verify `SHA256SUMS` and use `gh attestation verify` with the repository, source ref `refs/heads/main`, and source digest of that commit. Upload the verified installer, checksum, and signed provenance to a draft GitHub release before publishing the immutable release.
+
+## Publish the browser demo
+
+The Browser preview workflow builds `desktop/preview-dist` on pull requests. It publishes the demo to GitHub Pages from `develop` in this repository. In the repository's **Settings → Pages**, use **GitHub Actions** as the source. Run **Browser preview** on `develop` to redeploy the current branch.
 
 ## Measure the desktop on Ubuntu
 
