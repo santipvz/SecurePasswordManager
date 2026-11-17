@@ -17,7 +17,12 @@
     <a href="#command-line">Command line</a> ·
     <a href="#security-and-compatibility">Security</a>
   </p>
-  <img src="desktop/docs/vault-dark.png" alt="Desktop vault in dark mode with searchable example credentials and a hidden password" width="880">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="desktop/docs/desktop-demo-poster.png">
+    <source type="image/webp" srcset="desktop/docs/desktop-demo.webp">
+    <img src="desktop/docs/desktop-demo-poster.png" alt="Desktop app walkthrough: unlock the vault, search for a credential, reveal and copy its password, add a credential with the password generator, review short and reused passwords, switch to the dark theme, and lock the vault." width="880">
+  </picture>
+  <p><a href="desktop/docs/desktop-demo.mp4">Watch the 49-second desktop demo (MP4, 1080p60)</a></p>
 </div>
 
 ## Install on Ubuntu
