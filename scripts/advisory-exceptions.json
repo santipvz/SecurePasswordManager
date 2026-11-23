@@ -1,10 +1,1 @@
-[
-  {
-    "id": "GHSA-fc5q-39xc-vjpf",
-    "package": "picomatch",
-    "version": "4.0.7",
-    "lockfile": "desktop/package-lock.json",
-    "reason": "ReDoS in extglob matching with no patched release. picomatch is a build-time dependency of vite, tinyglobby, and svelte-check, is not bundled in the app, and only matches patterns from the project's own build configuration. Update picomatch and remove this entry once a fix is published.",
-    "expires": "2027-01-17"
-  }
-]
+[]
